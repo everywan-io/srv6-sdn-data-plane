@@ -15,6 +15,13 @@ import grpc
 import os
 import subprocess
 
+# Folders
+PROTO_FOLDER = "/home/user/repos/srv6-sdn-proto/"
+
+import sys
+# Add path of proto files
+sys.path.append(PROTO_FOLDER)
+
 import srv6_explicit_path_pb2_grpc
 import srv6_explicit_path_pb2
 
