@@ -179,6 +179,7 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
 
 
     def CreateVPN(self, request, context):
+        global IPv6_EMULATION
         logger.debug("config received:\n%s", request)
         # Extract the name of the VPN from the request
         name = str(request.name)
@@ -428,6 +429,7 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
         return srv6_vpn_msg_pb2.SRv6VPNReply(message="OK")
    
     def AddRemoteInterfaceToVPN(self, request, context):
+        global IPv6_EMULATION
         logger.debug("config received:\n%s", request)
         # Extract the interfaces from the request
         interface = str(request.interface)
@@ -466,6 +468,7 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
         return srv6_vpn_msg_pb2.SRv6VPNReply(message="OK")
 
     def RemoveVPN(self, request, context):
+        global IPv6_EMULATION
         logger.debug("Remove VPN request received:\n%s", request)
         # Extract name, table id and sid from the request
         name = str(request.name)
@@ -648,7 +651,7 @@ def parse_options():
     parser = OptionParser()
     parser.add_option("-d", "--debug", action="store_true", help="Activate debug logs")
     parser.add_option("-s", "--secure", action="store_true", help="Activate secure mode")
-    parser.add_option("-i", "--ipv6", dest="ipv6_emulation", action="store_true", help="Enable IPv6 emulation")
+    parser.add_option("-i", "--ipv6", dest="ipv6_emulation", action="store_true", default=False, help="Enable IPv6 emulation")
     # Parse input parameters
     (options, args) = parser.parse_args()
     # Setup properly the logger
