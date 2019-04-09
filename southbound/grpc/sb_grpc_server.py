@@ -171,7 +171,7 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
             interfaces = vpns[vpn_name]["interfaces"]
             vpn = response.vpns.add()
             vpn.name = vpn_name
-            vpn.tableid = str(tableid)
+            vpn.tableid = int(tableid)
             vpn.sid = sid
             for intf in interfaces:    
                 vpn.interfaces.append(intf)
@@ -510,7 +510,7 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
           vpns = dict()
           for vpn in response.vpns:
               # Create the request
-              delRequest = srv6_vpn_sb_pb2.RemoveVPNRequest()
+              delRequest = srv6_vpn_msg_pb2.RemoveVPNRequest()
               delRequest.name = vpn.name
               delRequest.tableid = vpn.tableid
               delRequest.sid = vpn.sid
