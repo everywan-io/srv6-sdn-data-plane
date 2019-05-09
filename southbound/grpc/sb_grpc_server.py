@@ -13,7 +13,7 @@ import threading
 import ast
 import telnetlib
 
-from ipaddress import IPv6Interface
+from ipaddress import IPv4Interface, IPv6Interface
 
 # Folders
 PROTO_FOLDER = "/home/user/repos/srv6-sdn-proto/"
@@ -220,6 +220,7 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
         return srv6_vpn_msg_pb2.SRv6VPNReply(message="OK")
 
     def AddLocalInterfaceToVPN(self, request, context):
+        global IPv6_EMULATION
         logger.debug("config received:\n%s", request)
         # Extract the name of the VPN from the request
         name = str(request.name)
@@ -232,15 +233,25 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
         # Get the index of the interface to be added
         intf_index = ip_route.link_lookup(ifname=interface)[0]
         # Delete all the prefix associated to the interface in the Quagga configuration
-        for addr in ip_route.get_addr(family=socket.AF_INET6, index=intf_index):
+        if IPv6_EMULATION:
+            family = socket.AF_INET6
+        else:
+            family = socket.AF_INET
+        for addr in ip_route.get_addr(family=family, index=intf_index):
             # Get the ip address
             ip = addr.get_attr("IFA_ADDRESS")
             # Get the prefix length
             prefixlen = addr.get("prefixlen")
-            # Get the network prefix
-            old_net = str(IPv6Interface(unicode(ip + "/" + str(prefixlen))).network)
-            # Get the ip address
-            old_ip = str(IPv6Interface(unicode(ip + "/" + str(prefixlen))))
+            if IPv6_EMULATION:
+                # Get the network prefix
+                old_net = str(IPv6Interface(unicode(ip + "/" + str(prefixlen))).network)
+                # Get the ip address
+                old_ip = str(IPv6Interface(unicode(ip + "/" + str(prefixlen))))
+            else:
+                # Get the network prefix
+                old_net = str(IPv4Interface(unicode(ip + "/" + str(prefixlen))).network)
+                # Get the ip address
+                old_ip = str(IPv4Interface(unicode(ip + "/" + str(prefixlen))))
             # Log to zebra daemon and remove the prefix
             # and delete the nd prefix and ip address associated to the interface
             try:
@@ -261,10 +272,14 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
                 tn.write("configure terminal\r\n")
                 # Interface configuration
                 tn.write("interface %s\r\n" % interface)
-                # Remove the old IPv6 prefix
-                tn.write("no ipv6 address %s\r\n" % old_ip)
-                # Remove the old IPv6 prefix
-                tn.write("no ipv6 nd prefix %s\r\n" % old_net)
+                if IPv6_EMULATION:
+                    # Remove the old IPv6 address
+                    tn.write("no ipv6 address %s\r\n" % old_ip)
+                    # Remove the old IPv6 prefix
+                    tn.write("no ipv6 nd prefix %s\r\n" % old_net)
+                else:
+                    # Remove the old IP address
+                    tn.write("no ip address %s\r\n" % old_ip)
                 # Close interface configuration
                 tn.write("q" + "\r\n")
                 # Close configuration mode
@@ -275,9 +290,14 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
                 tn.close()
             except socket.error:
                 print "Error: cannot establish a connection to %s on port %s" % (str("localhost"), str(port))
-        # Add the new address and the new prefix
-        new_ip = str(IPv6Interface(unicode(ipaddr)))
-        new_net = str(IPv6Interface(unicode(ipaddr)).network)
+        if IPv6_EMULATION:
+            # Add the new address and the new prefix
+            new_ip = str(IPv6Interface(unicode(ipaddr)))
+            new_net = str(IPv6Interface(unicode(ipaddr)).network)
+        else:
+            # Add the new address and the new prefix
+            new_ip = str(IPv4Interface(unicode(ipaddr)))
+            new_net = str(IPv4Interface(unicode(ipaddr)).network)
         # Log to zebra daemon and add the prefix
         # and delete the nd prefix and ip address associated to the interface
         try:
@@ -298,11 +318,15 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
             tn.write("configure terminal\r\n")
             # Interface configuration
             tn.write("interface %s\r\n" % interface)
-            # Add the new IPv6 address
-            tn.write("ipv6 address %s\r\n" % new_ip)
-            # Add the new IPv6 prefix
-            tn.write("ipv6 nd prefix %s\r\n" % new_net)
-            # Close interface configuration
+            if IPv6_EMULATION:
+                # Add the new IPv6 address
+                tn.write("ipv6 address %s\r\n" % new_ip)
+                # Add the new IPv6 prefix
+                tn.write("ipv6 nd prefix %s\r\n" % new_net)
+                # Close interface configuration
+            else:
+                # Add the new IP address
+                tn.write("ip address %s\r\n" % new_ip)
             tn.write("q" + "\r\n")
             # Close configuration mode
             tn.write("q" + "\r\n")
@@ -314,33 +338,34 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
             print "Error: cannot establish a connection to %s on port %s" % (str("localhost"), str(port))
         # Log to ospf6d daemon and remove the interface from the ospf advertisements
         # The subnet of a VPN site is a private subnet, so we don't advertise it
-        try:
-            password = "srv6"
-            # Init telnet
-            tn = telnetlib.Telnet("localhost", 2606)
-            # Password
-            tn.read_until("Password: ")
-            tn.write("%s\r\n" % password)
-            # Terminal length set to 0 to not have interruptions
-            tn.write("terminal length 0\r\n")
-            # Enable
-            tn.write("enable\r\n")
-            # Configure terminal
-            tn.write("configure terminal\r\n")
-            # Interface configuration
-            tn.write("router ospf6\r\n")
-            # Remove the interface from the link state messages
-            tn.write("no interface %s area 0.0.0.0\r\n" % interface)
-            # Close interface configuration
-            tn.write("q" + "\r\n")
-            # Close configuration mode
-            tn.write("q" + "\r\n")
-            # Close privileged mode
-            tn.write("q" + "\r\n")
-            # Close telnet
-            tn.close()
-        except socket.error:
-            print "Error: cannot establish a connection to %s on port %s" % (str("localhost"), str(port))
+        if IPv6_EMULATION:
+            try:
+                password = "srv6"
+                # Init telnet
+                tn = telnetlib.Telnet("localhost", 2606)
+                # Password
+                tn.read_until("Password: ")
+                tn.write("%s\r\n" % password)
+                # Terminal length set to 0 to not have interruptions
+                tn.write("terminal length 0\r\n")
+                # Enable
+                tn.write("enable\r\n")
+                # Configure terminal
+                tn.write("configure terminal\r\n")
+                # Interface configuration
+                tn.write("router ospf6\r\n")
+                # Remove the interface from the link state messages
+                tn.write("no interface %s area 0.0.0.0\r\n" % interface)
+                # Close interface configuration
+                tn.write("q" + "\r\n")
+                # Close configuration mode
+                tn.write("q" + "\r\n")
+                # Close privileged mode
+                tn.write("q" + "\r\n")
+                # Close telnet
+                tn.close()
+            except socket.error:
+                print "Error: cannot establish a connection to %s on port %s" % (str("localhost"), str(port))
         # Add local interface to the VRF associated to the VPN
         ip_route.link('set', index=intf_index, master=vpn_index)
         # Create the response
@@ -352,15 +377,25 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
         interface = str(request.interface)
         # Delete all the prefix associated to the interface in the Quagga configuration
         intf_index = ip_route.link_lookup(ifname=interface)[0]
-        for addr in ip_route.get_addr(family=socket.AF_INET6, index=intf_index):
+        if IPv6_EMULATION:
+            family = socket.AF_INET6
+        else:
+            family = socket.AF_INET
+        for addr in ip_route.get_addr(family=family, index=intf_index):
             # Get the ip address
             ip = addr.get_attr("IFA_ADDRESS")
             # Get the prefix length
             prefixlen = addr.get("prefixlen")
-            # Get the network prefix
-            old_net = str(IPv6Interface(unicode(ip + "/" + str(prefixlen))).network)
-            # Get the ip address
-            old_ip = str(IPv6Interface(unicode(ip + "/" + str(prefixlen))))
+            if IPv6_EMULATION:
+                # Get the network prefix
+                old_net = str(IPv6Interface(unicode(ip + "/" + str(prefixlen))).network)
+                # Get the ip address
+                old_ip = str(IPv6Interface(unicode(ip + "/" + str(prefixlen))))
+            else:
+                # Get the network prefix
+                old_net = str(IPv4Interface(unicode(ip + "/" + str(prefixlen))).network)
+                # Get the ip address
+                old_ip = str(IPv4Interface(unicode(ip + "/" + str(prefixlen))))
             # Log to zebra daemon and remove the prefix
             # and delete the nd prefix and ip address associated to the interface
             try:
@@ -381,10 +416,14 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
                 tn.write("configure terminal\r\n")
                 # Interface configuration
                 tn.write("interface %s\r\n" % interface)
-                # Remove the old IPv6 address
-                tn.write("no ipv6 address %s\r\n" % old_ip)
-                # Remove the old IPv6 prefix
-                tn.write("no ipv6 nd prefix %s\r\n" % old_net)
+                if IPv6_EMULATION:
+                    # Remove the old IPv6 address
+                    tn.write("no ipv6 address %s\r\n" % old_ip)
+                    # Remove the old IPv6 prefix
+                    tn.write("no ipv6 nd prefix %s\r\n" % old_net)
+                else:
+                    # Remove the old IP address
+                    tn.write("no ip address %s\r\n" % old_ip)
                 # Close interface configuration
                 tn.write("q" + "\r\n")
                 # Close configuration mode
@@ -396,33 +435,34 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
             except socket.error:
                 print "Error: cannot establish a connection to %s on port %s" % (str("localhost"), str(port))
         # Log to ospf6d daemon and remove the interface from the ospf advertisements
-        try:
-            password = "srv6"
-            # Init telnet
-            tn = telnetlib.Telnet("localhost", 2606)
-            # Password
-            tn.read_until("Password: ")
-            tn.write("%s\r\n" % password)
-            # Terminal length set to 0 to not have interruptions
-            tn.write("terminal length 0\r\n")
-            # Enable
-            tn.write("enable\r\n")
-            # Configure terminal
-            tn.write("configure terminal\r\n")
-            # Interface configuration
-            tn.write("router ospf6\r\n")
-            # Insert the interface in the link state messages
-            tn.write("interface %s area 0.0.0.0\r\n" % interface)
-            # Close interface configuration
-            tn.write("q" + "\r\n")
-            # Close configuration mode
-            tn.write("q" + "\r\n")
-            # Close privileged mode
-            tn.write("q" + "\r\n")
-            # Close telnet
-            tn.close()
-        except socket.error:
-            print "Error: cannot establish a connection to %s on port %s" % (str("localhost"), str(port))
+        if IPv6_EMULATION:
+            try:
+                password = "srv6"
+                # Init telnet
+                tn = telnetlib.Telnet("localhost", 2606)
+                # Password
+                tn.read_until("Password: ")
+                tn.write("%s\r\n" % password)
+                # Terminal length set to 0 to not have interruptions
+                tn.write("terminal length 0\r\n")
+                # Enable
+                tn.write("enable\r\n")
+                # Configure terminal
+                tn.write("configure terminal\r\n")
+                # Interface configuration
+                tn.write("router ospf6\r\n")
+                # Insert the interface in the link state messages
+                tn.write("interface %s area 0.0.0.0\r\n" % interface)
+                # Close interface configuration
+                tn.write("q" + "\r\n")
+                # Close configuration mode
+                tn.write("q" + "\r\n")
+                # Close privileged mode
+                tn.write("q" + "\r\n")
+                # Close telnet
+                tn.close()
+            except socket.error:
+                print "Error: cannot establish a connection to %s on port %s" % (str("localhost"), str(port))
         # Remove local interface from the VRF associated to the VPN
         ip_route.link('set', index=intf_index, master=0)
         # Create the response
