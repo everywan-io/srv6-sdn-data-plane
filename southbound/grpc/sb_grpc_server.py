@@ -194,6 +194,8 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
             if e.code == NETLINK_ERROR_FILE_EXISTS:
                 # If the VRF already exists, create the error response
                 return srv6_vpn_msg_pb2.SRv6VPNReply(message="Error: VRF %s already exists" % name)
+            else:
+                return srv6_vpn_msg_pb2.SRv6VPNReply(message="Error: %s" % e.code)
         # Enable the new VRF
         vpn_index = ip_route.link_lookup(ifname=name)[0]
         ip_route.link("set", index=vpn_index, state="up")
@@ -204,6 +206,8 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
             if e.code == NETLINK_ERROR_FILE_EXISTS:
                 # If a rule for destination SID already exists, create the error response
                 return srv6_vpn_msg_pb2.SRv6VPNReply(message="Error: a rule for destination SID %s already exists" % sid)
+            else:
+                return srv6_vpn_msg_pb2.SRv6VPNReply(message="Error: %s" % e.code)
         # Add rule for decapsulation: lookup into the table associated to the VPN
         try:
             if IPv6_EMULATION:
@@ -216,6 +220,8 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
             if e.code == NETLINK_ERROR_FILE_EXISTS:
                 # A route for destination SID already exists, create the error response
                 return srv6_vpn_msg_pb2.SRv6VPNReply(message="Error: a route for destination SID %s already exists" % sid)
+            else:
+                return srv6_vpn_msg_pb2.SRv6VPNReply(message="Error: %s" % e.code)
         # Create the response
         return srv6_vpn_msg_pb2.SRv6VPNReply(message="OK")
 
@@ -240,6 +246,7 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
         for addr in ip_route.get_addr(family=family, index=intf_index):
             # Get the ip address
             ip = addr.get_attr("IFA_ADDRESS")
+            print "ip", ip
             # Get the prefix length
             prefixlen = addr.get("prefixlen")
             if IPv6_EMULATION:
@@ -489,6 +496,8 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
             if e.code == NETLINK_ERROR_FILE_EXISTS:
                 # If a route for remote destination prefix already exists, create the error response
                 return srv6_vpn_msg_pb2.SRv6VPNReply(message="Error: a route for remote destination %s already exists" % interface)
+            else:
+                return srv6_vpn_msg_pb2.SRv6VPNReply(message="Error: %s" % e.code)
         # Create the response
         return srv6_vpn_msg_pb2.SRv6VPNReply(message="OK")
 
@@ -504,6 +513,8 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
             if e.code == NETLINK_ERROR_NO_SUCH_PROCESS:
                 # If the destination SID to delete does not exists, create the error response
                 return srv6_vpn_msg_pb2.SRv6VPNReply(message="Error: a route for remote destination %s does not exist" % interface)
+            else:
+                return srv6_vpn_msg_pb2.SRv6VPNReply(message="Error: %s" % e.code)
         # Create the response
         return srv6_vpn_msg_pb2.SRv6VPNReply(message="OK")
 
@@ -521,6 +532,8 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
             if e.code == NETLINK_ERROR_NO_SUCH_PROCESS:
                 # If the destination SID to delete does not exists, create the error response
                 return srv6_vpn_msg_pb2.SRv6VPNReply(message="Error: the destination SID %s does not exist" % sid)
+            else:
+                return srv6_vpn_msg_pb2.SRv6VPNReply(message="Error: %s" % e.code)
         # Delete SID rule for the routing policy associated to the VPN
         try:
             ip_route.rule("del", family=socket.AF_INET6, table=1, dst=sid, dst_len=64)
@@ -535,6 +548,8 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
             if e.code == NETLINK_ERROR_NO_SUCH_PROCESS:
                 # If the destination SID to delete does not exists, create the error response
                 return srv6_vpn_msg_pb2.SRv6VPNReply(message="Error: the VRF %s does not exist" % name)
+            else:
+                return srv6_vpn_msg_pb2.SRv6VPNReply(message="Error: %s" % e.code)
         # Delete all remaining informations associated to the VPN
         if IPv6_EMULATION:
             ip_route.flush_routes(family=socket.AF_INET6, table=tableid)
