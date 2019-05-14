@@ -16,7 +16,15 @@ import telnetlib
 import sys
 
 from ipaddress import IPv4Interface, IPv6Interface
-from ipaddress import AddressValueError
+
+from socket import AF_INET, AF_INET6, AF_UNSPEC
+
+from exception import InterfaceNotFoundError
+from exception import AddressNotFoundError
+from exception import AddressAlreadyAssignedError
+from exception import InvalidAddressFamilyError
+from exception import UnreachableZebraDaemonError
+from exception import UnreachableOspf6DaemonError
 
 # Folders
 PROTO_FOLDER = "/home/user/repos/srv6-sdn-proto/"
@@ -27,6 +35,11 @@ import srv6_explicit_path_pb2_grpc
 import srv6_explicit_path_pb2
 import srv6_vpn_msg_pb2
 import srv6_vpn_sb_pb2_grpc
+import interface_manager_pb2_grpc
+import interface_manager_pb2
+
+from sb_grpc_utils import validateTableId
+from sb_grpc_utils import getAddressFamily
 
 # Global variables definition
 
@@ -66,33 +79,408 @@ NETLINK_ERROR_NO_SUCH_PROCESS = 3
 NETLINK_ERROR_NO_SUCH_DEVICE = 19
 NETLINK_ERROR_OPERATION_NOT_SUPPORTED = 95
 
+ZEBRA_PORT = 2601
+OSPF6D_PORT = 2606
+PASSWORD = 'srv6'
 
-def isValidIPv6Address(ipaddr):
+
+
+def _addIPv6Address(ifname, ip):
+    global ZEBRA_PORT, PASSWORD
+    # Check if interface is valid
+    if existsInterface(ifname=ifname) is False:
+        raise InterfaceNotFoundError
+    # Check if ip is a valid IPv6 address
+    if getAddressFamily(ip) != AF_INET6:
+        raise InvalidAddressFamilyError
+    # Get network prefix
+    net = str(IPv6Interface(unicode(ip)).network)
+    # Get IPv6 address
+    ip = str(IPv6Interface(unicode(ip)))
+    # Log to zebra daemon and add prefix
+    # and ip address to the interface
+    port = ZEBRA_PORT
+    password = PASSWORD
     try:
-        IPv6Interface(unicode(ipaddr))
-        return True
-    except AddressValueError:
-        return False
+        # Init telnet
+        tn = telnetlib.Telnet("localhost", port)
+        # Password
+        tn.read_until("Password: ")
+        tn.write("%s\r\n" % password)
+        # Terminal length set to 0 to not have interruptions
+        tn.write("terminal length 0\r\n")
+        # Enable
+        tn.write("enable\r\n")
+        # Password
+        tn.read_until("Password: ")
+        tn.write("%s\r\n" % password)
+        # Configure terminal
+        tn.write("configure terminal\r\n")
+        # Interface configuration
+        tn.write("interface %s\r\n" % ifname)
+        # Add the new IPv6 address
+        tn.write("ipv6 address %s\r\n" % ip)
+        # Add the new IPv6 prefix
+        tn.write("ipv6 nd prefix %s\r\n" % net)
+        # Close interface configuration
+        tn.write("q" + "\r\n")
+        # Close configuration mode
+        tn.write("q" + "\r\n")
+        # Close privileged mode
+        tn.write("q" + "\r\n")
+        # Read all
+        tn.read_all()
+        # Close telnet
+        tn.close()
+    except socket.error:
+        raise UnreachableZebraDaemonError
 
-
-def isValidIPv4Address(ipaddr):
+def _removeIPv6Address(ifname, ip=None):
+    global ZEBRA_PORT, PASSWORD
+    # Check if interface is valid
+    if not existsInterface(ifname=ifname):
+        raise InterfaceNotFoundError
+    # Check if ip is a valid IPv6 address
+    if ip is not None and getAddressFamily(ip) != AF_INET6:
+        raise InvalidAddressFamilyError
+    # Let's check if the IPv6 address exists
+    # Get the index of the interface
+    ifindex = ip_route.link_lookup(ifname=ifname)[0]
+    # Get the IP address
+    ips = ip_route.get_addr(index=ifindex,
+                            family=AF_INET6, address=ip)
+    if ip is None and len(ips) == 0:
+        # Address not found
+        raise AddressNotFoundError
+    # Log to zebra daemon and remove the prefix and delete
+    # the nd prefix and ip address associated to the interface
+    port = ZEBRA_PORT
+    password = PASSWORD
     try:
-        IPv4Interface(unicode(ipaddr))
-        return True
-    except AddressValueError:
-        return False
+        # Init telnet
+        tn = telnetlib.Telnet("localhost", port)
+        # Password
+        tn.read_until("Password: ")
+        tn.write("%s\r\n" % password)
+        # Terminal length set to 0 to not have interruptions
+        tn.write("terminal length 0\r\n")
+        # Enable
+        tn.write("enable\r\n")
+        # Password
+        tn.read_until("Password: ")
+        tn.write("%s\r\n" % password)
+        # Configure terminal
+        tn.write("configure terminal\r\n")
+        # Interface configuration
+        tn.write("interface %s\r\n" % ifname)
+        # Remove the IP address and the nd prefix
+        for ipaddr in ips:
+            # Get the ip address
+            ip = ipaddr.get_attr("IFA_ADDRESS")
+            # Get the prefix length
+            prefixlen = ipaddr.get("prefixlen")
+            # Get network prefix
+            net = str(IPv6Interface(unicode("%s/%s"
+                                            % (ip, str(prefixlen))))
+                      .network)
+            # Get full IP address
+            ip = str(IPv6Interface(unicode("%s/%s"
+                                           % (ip, str(prefixlen)))))
+            # Remove the IPv6 address
+            tn.write("no ipv6 address %s\r\n" % ip)
+            # Remove the IPv6 prefix
+            tn.write("no ipv6 nd prefix %s\r\n" % net)
+        # Close interface configuration
+        tn.write("q" + "\r\n")
+        # Close configuration mode
+        tn.write("q" + "\r\n")
+        # Close privileged mode
+        tn.write("q" + "\r\n")
+        # Read all
+        tn.read_all()
+        # Close telnet
+        tn.close()
+    except socket.error:
+        raise UnreachableZebraDaemonError
 
+def _addIPv4Address(ifname, ip):
+    global ZEBRA_PORT, PASSWORD
+    # Check if interface is valid
+    if existsInterface(ifname=ifname) is False:
+        raise InterfaceNotFoundError
+    # Check if ip is a valid IPv4 address
+    if getAddressFamily(ip) != AF_INET:
+        raise InvalidAddressFamilyError
+    # Get IPv4 address
+    ip = str(IPv4Interface(unicode(ip)))
+    # Get the index of the interface
+    ifindex = ip_route.link_lookup(ifname=ifname)[0]
+    # Check if the IP address exists
+    if len(ip_route.get_addr(index=ifindex,
+                             family=AF_INET6)) > 0:
+        # The interface already has an IPv4 address
+        raise AddressAlreadyAssignedError
+    # Log to zebra daemon
+    # and add the ip address to the interface
+    port = ZEBRA_PORT
+    password = PASSWORD
+    try:
+        # Init telnet
+        tn = telnetlib.Telnet("localhost", port)
+        # Password
+        tn.read_until("Password: ")
+        tn.write("%s\r\n" % password)
+        # Terminal length set to 0 to not have interruptions
+        tn.write("terminal length 0\r\n")
+        # Enable
+        tn.write("enable\r\n")
+        # Password
+        tn.read_until("Password: ")
+        tn.write("%s\r\n" % password)
+        # Configure terminal
+        tn.write("configure terminal\r\n")
+        # Interface configuration
+        tn.write("interface %s\r\n" % ifname)
+        # Add the new IP address
+        tn.write("ip address %s\r\n" % ip)
+        # Close interface configuration
+        tn.write("q" + "\r\n")
+        # Close configuration mode
+        tn.write("q" + "\r\n")
+        # Close privileged mode
+        tn.write("q" + "\r\n")
+        # Read all
+        tn.read_all()
+        # Close telnet
+        tn.close()
+    except socket.error:
+        raise UnreachableZebraDaemonError
 
-def getAddressFamily(ipaddr):
-    if isValidIPv6Address(ipaddr):
-        # IPv6 address
-        return socket.AF_INET6
-    elif isValidIPv4Address(ipaddr):
-        # IPv4 address
-        return socket.AF_INET
+def _removeIPv4Address(ifname, ip=None):
+    global ZEBRA_PORT, PASSWORD
+    # Check if interface is valid
+    if existsInterface(ifname=ifname) is False:
+        raise InterfaceNotFoundError
+    # Check if ip is a valid IPv4 address
+    if ip is not None and getAddressFamily(ip) != AF_INET:
+        raise InvalidAddressFamilyError
+    # Check if the IP address exists
+    ifindex = ip_route.link_lookup(ifname=ifname)[0]
+    ips = ip_route.get_addr(index=ifindex,
+                            family=AF_INET, address=ip)
+    if ip is not None and len(ips) == 0:
+        # Address not found
+        raise AddressNotFoundError
+    # Log to zebra daemon and remove the prefix
+    # and ip address associated to the interface
+    port = ZEBRA_PORT
+    password = PASSWORD
+    try:
+        # Init telnet
+        tn = telnetlib.Telnet("localhost", port)
+        # Password
+        tn.read_until("Password: ")
+        tn.write("%s\r\n" % password)
+        # Terminal length set to 0 to not have interruptions
+        tn.write("terminal length 0\r\n")
+        # Enable
+        tn.write("enable\r\n")
+        # Password
+        tn.read_until("Password: ")
+        tn.write("%s\r\n" % password)
+        # Configure terminal
+        tn.write("configure terminal\r\n")
+        # Interface configuration
+        tn.write("interface %s\r\n" % ifname)
+        # Remove the IPv4 address
+        for ipaddr in ips:
+            # Get the ip address
+            ip = ipaddr.get_attr("IFA_ADDRESS")
+            # Get the prefix length
+            prefixlen = ipaddr.get("prefixlen")
+            # Get full IP address
+            ip = str(IPv4Interface(unicode("%s/%s"
+                                   % (ip, str(prefixlen)))))
+            # Remove the IP address
+            tn.write("no ip address %s\r\n" % ip)
+        # Close interface configuration
+        tn.write("q" + "\r\n")
+        # Close configuration mode
+        tn.write("q" + "\r\n")
+        # Close privileged mode
+        tn.write("q" + "\r\n")
+        # Read all
+        tn.read_all()
+        # Close telnet
+        tn.close()
+    except socket.error:
+        raise UnreachableZebraDaemonError
+
+def _flushAddresses(ifname, family=AF_UNSPEC):
+    # Check if interface is valid
+    if not existsInterface(ifname=ifname):
+        raise InterfaceNotFoundError
+    if family == AF_INET6:
+        # Remove all IPv6 addresses
+        _removeIPv6Address(ifname=ifname)
+    elif family == AF_INET:
+        # Remove all IP addresses
+        _removeIPv4Address(ifname=ifname)
+    elif family == AF_UNSPEC:
+        # Remove all IPv6 and IPv4 addresses
+        _removeIPv6Address(ifname=ifname)
+        _removeIPv4Address(ifname=ifname)
     else:
-        # Invalid address
-        return None
+        # Family is invalid
+        raise InvalidAddressFamilyError
+
+def _turnOnInterfaceAdvertisements(ifname):
+    global OSPF6D_PORT, PASSWORD
+    # Check if interface is valid
+    if existsInterface(ifname=ifname) is False:
+        raise InterfaceNotFoundError
+    # Log to ospf6d daemon and remove the interface
+    # from the ospf advertisements. The subnet of a VPN site
+    # is a private subnet, so we don't advertise it
+    port = OSPF6D_PORT
+    password = PASSWORD
+    try:
+        # Init telnet
+        tn = telnetlib.Telnet("localhost", port)
+        # Password
+        tn.read_until("Password: ")
+        tn.write("%s\r\n" % password)
+        # Terminal length set to 0 to not have interruptions
+        tn.write("terminal length 0\r\n")
+        # Enable
+        tn.write("enable\r\n")
+        # Configure terminal
+        tn.write("configure terminal\r\n")
+        # Interface configuration
+        tn.write("router ospf6\r\n")
+        # Remove the interface from the link state messages
+        tn.write("interface %s area 0.0.0.0\r\n" % ifname)
+        # Close interface configuration
+        tn.write("q" + "\r\n")
+        # Close configuration mode
+        tn.write("q" + "\r\n")
+        # Close privileged mode
+        tn.write("q" + "\r\n")
+        # Read all
+        tn.read_all()
+        # Close telnet
+        tn.close()
+    except socket.error:
+        raise UnreachableOspf6DaemonError
+
+def _turnOffInterfaceAdvertisements(ifname):
+    global OSPF6D_PORT, PASSWORD
+    # Check if interface is valid
+    if existsInterface(ifname=ifname) is False:
+        raise InterfaceNotFoundError
+    # Log to ospf6d daemon and remove the interface
+    # from the ospf advertisements. The subnet of a VPN site
+    # is a private subnet, so we don't advertise it
+    port = OSPF6D_PORT
+    password = PASSWORD
+    try:
+        # Init telnet
+        tn = telnetlib.Telnet("localhost", port)
+        # Password
+        tn.read_until("Password: ")
+        tn.write("%s\r\n" % password)
+        # Terminal length set to 0 to not have interruptions
+        tn.write("terminal length 0\r\n")
+        # Enable
+        tn.write("enable\r\n")
+        # Configure terminal
+        tn.write("configure terminal\r\n")
+        # Interface configuration
+        tn.write("router ospf6\r\n")
+        # Remove the interface from the link state messages
+        tn.write("no interface %s area 0.0.0.0\r\n" % ifname)
+        # Close interface configuration
+        tn.write("q" + "\r\n")
+        # Close configuration mode
+        tn.write("q" + "\r\n")
+        # Close privileged mode
+        tn.write("q" + "\r\n")
+        # Read all
+        tn.read_all()
+        # Close telnet
+        tn.close()
+    except socket.error:
+        raise UnreachableOspf6DaemonError
+
+
+# Utility function to check if an interface exists
+def existsInterface(ifname):
+    try:
+        ip_route.link('get', ifname=ifname)
+        return True
+    except NetlinkError as e:
+        if e.code == NETLINK_ERROR_NO_SUCH_DEVICE:
+            return False
+
+
+# Utility function to check if a VRF exists
+def existsVRF(vrf):
+    print "exists " + vrf
+    if not existsInterface(ifname=vrf):
+        print 1
+        return False
+    print 2
+    # Get the interface
+    link = ip_route.get_links(ifname=vrf)[0]
+    print 3
+    # Get interface informations
+    link_info = link.get_attr("IFLA_LINKINFO")
+    print 4
+    # Each VPN has an associated VRF
+    # The name of the VPN is the same of the associated VRF
+    # If the interface is a VRF, add to vpn names
+    if (link_info is not None and
+            link_info.get_attr("IFLA_INFO_KIND") == "vrf"):
+        print 5
+        return True
+    else:
+        print 6
+        return False
+
+
+# Utility function to check if a VRF exists
+def isInterfaceInVRF(ifname, vrf):
+    print "is interface in vrf", 1
+    if (existsInterface(ifname=ifname) is False or
+            existsVRF(vrf=vrf) is False):
+        print "is interface in vrf", 2
+        return False
+    vrf_index = ip_route.link_lookup(ifname=vrf)[0]
+    print "is interface in vrf", 3
+    # Scan all interfaces and check interfaces associated to found VPNs
+    link = ip_route.get_links(ifname=ifname)[0]
+    print "is interface in vrf", 4
+    print link
+    if link.get_attr("IFLA_MASTER") is not None:
+        print "is interface in vrf", 5
+        # Get the index of the VRF to which the interface is associated
+        vrf_index2 = link.get_attr("IFLA_MASTER")
+        print vrf_index
+        print vrf_index2
+        if vrf_index == vrf_index2:
+            return True
+    return False
+
+
+# Utility function to check if a VRF exists
+def isInterfaceInAnyVRF(ifname):
+    if existsInterface(ifname=ifname) is False:
+        return False
+    # Scan all interfaces and check interfaces associated to found VPNs
+    link = ip_route.get_links(ifname=ifname)[0]
+    if link.get_attr("IFLA_MASTER") is not None:
+        return True
+    return False
 
 
 class SRv6ExplicitPathHandler(srv6_explicit_path_pb2_grpc
@@ -140,7 +528,7 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
             # Get interface informations
             link_info = link.get_attr("IFLA_LINKINFO")
             # Get interface name
-            intf_name = link.get_attr("IFLA_IFNAME")
+            ifname = link.get_attr("IFLA_IFNAME")
             # Each VPN has an associated VRF
             # The name of the VPN is the same of the associated VRF
             # If the interface is a VRF, add to vpn names
@@ -153,24 +541,24 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
                 tableid = (link_info.get_attr("IFLA_INFO_DATA")
                            .get_attr("IFLA_VRF_TABLE"))
                 # Save to the VPNs dict
-                vpns[intf_name] = {
+                vpns[ifname] = {
                   "sid": "",
                   "tableid": tableid,
                   "interfaces": set()
                 }
-                tableid_to_vpn[tableid] = intf_name
-                intf_idx = ip_route.link_lookup(ifname=intf_name)[0]
-                idx_to_vpn[intf_idx] = intf_name
+                tableid_to_vpn[tableid] = ifname
+                intf_idx = ip_route.link_lookup(ifname=ifname)[0]
+                idx_to_vpn[intf_idx] = ifname
         # Scan all interfaces and check interfaces associated to found VPNs
         for link in ip_route.get_links():
             # Get interface name
-            intf_name = link.get_attr("IFLA_IFNAME")
+            ifname = link.get_attr("IFLA_IFNAME")
             if link.get_attr("IFLA_MASTER") is not None:
                 # Get the index of the VRF to which the interface is associated
                 vrf_index = link.get_attr("IFLA_MASTER")
                 # Get the name of the VRF, that is the name of the VPN
                 vpn_name = idx_to_vpn[vrf_index]
-                vpns[vpn_name]["interfaces"].add(intf_name)
+                vpns[vpn_name]["interfaces"].add(ifname)
         # SIDs
         # Scan all routes and search for the SIDs associated to the VPNs
         for route in ip_route.get_routes(table=1):
@@ -186,9 +574,9 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
                 # Retrieve the table id associated to some VPN
                 tableid = encap_info.get_attr("SEG6_LOCAL_TABLE")
                 # Get VPN name
-                name = tableid_to_vpn[tableid]
+                vpn_name = tableid_to_vpn[tableid]
                 # Save information to the VPN dict
-                vpns[name]["sid"] = sid
+                vpns[vpn_name]["sid"] = sid
         # Create the response
         response = srv6_vpn_msg_pb2.SRv6VPNList()
         for vpn_name in vpns:
@@ -196,7 +584,7 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
             sid = vpns[vpn_name]["sid"]
             interfaces = vpns[vpn_name]["interfaces"]
             vpn = response.vpns.add()
-            vpn.name = vpn_name
+            vpn.vpn_name = vpn_name
             vpn.tableid = int(tableid)
             vpn.sid = sid
             for intf in interfaces:
@@ -206,346 +594,175 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
     def CreateVPN(self, request, context):
         logger.debug("config received:\n%s", request)
         # Extract the name of the VPN from the request
-        name = str(request.name)
+        vpn_name = str(request.vpn_name)
         # Extract the table id from the request
         tableid = request.tableid
         # Extract the sid from the request
         sid = str(request.sid)
-        # Try to create a new VRF and associate to the specified routing table
+        # Check if the VPN exists
+        if existsVRF(vrf=vpn_name):
+            return (srv6_vpn_msg_pb2
+                    .SRv6VPNReply(message="Error: VPN already exists"))
+        if not validateTableId(tableid):
+            # Invalid table ID
+            return (srv6_vpn_msg_pb2
+                    .SRv6VPNReply(message="Error: Invalid table ID"))
+        if getAddressFamily(sid) != AF_INET6:
+            # Invalid SID
+            return (srv6_vpn_msg_pb2
+                    .SRv6VPNReply(message="Error: Invalid SID"))
         try:
-            ip_route.link("add", ifname=name, kind="vrf", vrf_table=tableid)
-        except NetlinkError as e:
-            if e.code == NETLINK_ERROR_FILE_EXISTS:
-                # If the VRF already exists, create the error response
-                return (srv6_vpn_msg_pb2
-                        .SRv6VPNReply(message="Error: VRF %s already exists"
-                                      % name))
-            else:
-                return (srv6_vpn_msg_pb2
-                        .SRv6VPNReply(message="Error: %s" % e.code))
-        # Enable the new VRF
-        vpn_index = ip_route.link_lookup(ifname=name)[0]
-        ip_route.link("set", index=vpn_index, state="up")
-        # Add rule for incoming packets belonging to a VPN
-        # lookup into the local SIDs table
-        try:
-            ip_route.rule("add", family=socket.AF_INET6,
+            # Add rule for incoming packets belonging to a VPN
+            # lookup into the local SIDs table
+            ip_route.rule("add", family=AF_INET6,
                           table=1, dst=sid, dst_len=64)
-        except NetlinkError as e:
-            if e.code == NETLINK_ERROR_FILE_EXISTS:
-                # If a rule for destination SID already exists
-                # create the error response
-                return (srv6_vpn_msg_pb2
-                        .SRv6VPNReply(message="Error: a rule for destination "
-                                      "SID %s already exists" % sid))
-            else:
-                return (srv6_vpn_msg_pb2
-                        .SRv6VPNReply(message="Error: %s" % e.code))
-        # Add rule for decapsulation
-        # lookup into the table associated to the VPN
-        try:
+            # Add rule for decapsulation
+            # lookup into the table associated to the VPN
             if True:
-                ip_route.route("add", family=socket.AF_INET6, dst=sid,
+                ip_route.route("add", family=AF_INET6, dst=sid,
                                oif=idxs[interfaces[0]], table=1,
                                encap={"type": "seg6local", "action": "End.DT6",
                                       "table": tableid})
             else:
-                ip_route.route("add", family=socket.AF_INET6, dst=sid,
+                ip_route.route("add", family=AF_INET6, dst=sid,
                                oif=idxs[interfaces[0]], table=1,
                                encap={"type": "seg6local", "action": "End.DT4",
                                       "table": tableid})
-            # ip_route.route("add", family=socket.AF_INET6, dst=sid,
+            # ip_route.route("add", family=AF_INET6, dst=sid,
             #                oif=idxs[interfaces[0]], table=1,
             #                encap={"type": "seg6local", "action": "End.DT46",
             #                "table": tableid})
         except NetlinkError as e:
             if e.code == NETLINK_ERROR_FILE_EXISTS:
-                # A route for destination SID already exists
-                # create the error response
+                # The rule/route for destination SID already exists
                 return (srv6_vpn_msg_pb2
-                        .SRv6VPNReply(message="Error: a route for "
-                                      "destination SID %s already exists"
-                                      % sid))
+                        .SRv6VPNReply(message="Error: Unavailable SID"))
             else:
                 return (srv6_vpn_msg_pb2
                         .SRv6VPNReply(message="Error: %s" % e.code))
+        # Create a new VRF and associate to the specified routing table
+        try:
+            ip_route.link("add", ifname=vpn_name,
+                          kind="vrf", vrf_table=tableid)
+            # Enable the new VRF
+            vpn_index = ip_route.link_lookup(ifname=vpn_name)[0]
+            ip_route.link("set", index=vpn_index, state="up")
+        except NetlinkError as e:
+            return (srv6_vpn_msg_pb2
+                    .SRv6VPNReply(message="Error: %s" % e.code))
         # Create the response
         return srv6_vpn_msg_pb2.SRv6VPNReply(message="OK")
 
     def AddLocalInterfaceToVPN(self, request, context):
         logger.debug("config received:\n%s", request)
         # Extract the name of the VPN from the request
-        name = str(request.name)
+        vpn_name = str(request.vpn_name)
         # Extract the interface from the request
-        interface = str(request.interface)
-        # Extract the ip address from the request
-        ipaddr = str(request.ipaddr)
-        # Get the index of the VPN
-        vpn_index = ip_route.link_lookup(ifname=name)[0]
-        # Get the index of the interface to be added
-        intf_index = ip_route.link_lookup(ifname=interface)[0]
-        # Get address family
-        family = getAddressFamily(ipaddr)
-        if family is None:
-            # Address family not supported
+        ifname = str(request.ifname)
+        # Check if the vrf and the interface exist
+        if not existsInterface(ifname=ifname):
             return (srv6_vpn_msg_pb2
-                    .SRv6VPNReply(message="Error: address "
-                                  "family not supported"))
-        # Delete all the prefix associated
-        # to the interface in the Quagga configuration
-        for addr in ip_route.get_addr(index=intf_index):
-            # Get the ip address
-            ip = addr.get_attr("IFA_ADDRESS")
-            # Get the prefix length
-            prefixlen = addr.get("prefixlen")
-            # Log to zebra daemon and remove the prefix and delete
-            # the nd prefix and ip address associated to the interface
-            try:
-                password = "srv6"
-                port = 2601
-                # Init telnet
-                tn = telnetlib.Telnet("localhost", port)
-                # Password
-                tn.read_until("Password: ")
-                tn.write("%s\r\n" % password)
-                # Terminal length set to 0 to not have interruptions
-                tn.write("terminal length 0\r\n")
-                # Enable
-                tn.write("enable\r\n")
-                # Password
-                tn.read_until("Password: ")
-                tn.write("%s\r\n" % password)
-                # Configure terminal
-                tn.write("configure terminal\r\n")
-                # Interface configuration
-                tn.write("interface %s\r\n" % interface)
-                if addr.get("family") == socket.AF_INET6:
-                    # Remove the old IPv6 address
-                    old_ip = IPv6Interface(unicode("%s/%s"
-                                                   % (ip, str(prefixlen))))
-                    old_ip = str(old_ip)
-                    tn.write("no ipv6 address %s\r\n" % old_ip)
-                    # Remove the old IPv6 prefix
-                    old_net = (IPv6Interface(unicode("%s/%s"
-                                                     % (ip, str(prefixlen))))
-                               .network)
-                    old_net = str(old_net)
-                    tn.write("no ipv6 nd prefix %s\r\n" % old_net)
-                elif addr.get("family") == socket.AF_INET:
-                    # Remove the old IP address
-                    old_ip = IPv4Interface(unicode("%s/%s"
-                                                   % (ip, str(prefixlen))))
-                    tn.write("no ip address %s\r\n" % old_ip)
-                # Close interface configuration
-                tn.write("q" + "\r\n")
-                # Close configuration mode
-                tn.write("q" + "\r\n")
-                # Close privileged mode
-                tn.write("q" + "\r\n")
-                tn.read_all()
-                # Close telnet
-                tn.close()
-            except socket.error:
-                print ("Error: cannot establish a connection "
-                       "to %s on port %s" % (str("localhost"), str(port)))
-        # Log to zebra daemon and add the prefix
-        # and delete the nd prefix and ip address associated to the interface
+                    .SRv6VPNReply(message="Error: Invalid interface"))
+        if not existsVRF(vrf=vpn_name):
+            print "violazione addadd localloca"
+            return (srv6_vpn_msg_pb2
+                    .SRv6VPNReply(message="Error: Invalid VPN"))
+        if isInterfaceInAnyVRF(ifname=ifname):
+            return (srv6_vpn_msg_pb2
+                    .SRv6VPNReply(message="Error: Interface "
+                                  "already belongs to a VPN"))
+        # Get the index of the VPN
+        vpn_index = ip_route.link_lookup(ifname=vpn_name)[0]
+        # Get the index of the interface to be added
+        ifindex = ip_route.link_lookup(ifname=ifname)[0]
         try:
-            password = "srv6"
-            port = 2601
-            # Init telnet
-            tn = telnetlib.Telnet("localhost", port)
-            # Password
-            tn.read_until("Password: ")
-            tn.write("%s\r\n" % password)
-            # Terminal length set to 0 to not have interruptions
-            tn.write("terminal length 0\r\n")
-            # Enable
-            tn.write("enable\r\n")
-            # Password
-            tn.read_until("Password: ")
-            tn.write("%s\r\n" % password)
-            # Configure terminal
-            tn.write("configure terminal\r\n")
-            # Interface configuration
-            tn.write("interface %s\r\n" % interface)
-            if family == socket.AF_INET6:
-                # Add the new IPv6 address
-                new_ip = str(IPv6Interface(unicode(ipaddr)))
-                tn.write("ipv6 address %s\r\n" % new_ip)
-                # Add the new IPv6 prefix
-                new_net = str(IPv6Interface(unicode(ipaddr)).network)
-                tn.write("ipv6 nd prefix %s\r\n" % new_net)
-                # Close interface configuration
-            elif family == socket.AF_INET:
-                # Add the new IP address
-                new_ip = str(IPv4Interface(unicode(ipaddr)))
-                tn.write("ip address %s\r\n" % new_ip)
-            tn.write("q" + "\r\n")
-            # Close configuration mode
-            tn.write("q" + "\r\n")
-            # Close privileged mode
-            tn.write("q" + "\r\n")
-            tn.read_all()
-            # Close telnet
-            tn.close()
-        except socket.error:
-            print ("Error: cannot establish a connection "
-                   "to %s on port %s" % (str("localhost"), str(port)))
-        # Log to ospf6d daemon and remove the interface
-        # from the ospf advertisements. The subnet of a VPN site
-        # is a private subnet, so we don't advertise it
-        if family == socket.AF_INET6:
-            try:
-                password = "srv6"
-                port = 2606
-                # Init telnet
-                tn = telnetlib.Telnet("localhost", port)
-                # Password
-                tn.read_until("Password: ")
-                tn.write("%s\r\n" % password)
-                # Terminal length set to 0 to not have interruptions
-                tn.write("terminal length 0\r\n")
-                # Enable
-                tn.write("enable\r\n")
-                # Configure terminal
-                tn.write("configure terminal\r\n")
-                # Interface configuration
-                tn.write("router ospf6\r\n")
-                # Remove the interface from the link state messages
-                tn.write("no interface %s area 0.0.0.0\r\n" % interface)
-                # Close interface configuration
-                tn.write("q" + "\r\n")
-                # Close configuration mode
-                tn.write("q" + "\r\n")
-                # Close privileged mode
-                tn.write("q" + "\r\n")
-                tn.read_all()
-                # Close telnet
-                tn.close()
-            except socket.error:
-                print ("Error: cannot establish a connection to %s on port %s"
-                       % (str("localhost"), str(port)))
+            # Delete all the addresses associated to the interface
+            _flushAddresses(ifname=ifname)
+            # Remove the interface from the ospf advertisements
+            # The subnet of a VPN site is a private subnet
+            # we don't advertise it
+            _turnOffInterfaceAdvertisements(ifname=ifname)
+        except InterfaceNotFoundError:
+            return (srv6_vpn_msg_pb2
+                    .SRv6VPNReply(message="Error: Invalid interface"))
+        except UnreachableZebraDaemonError:
+            return (srv6_vpn_msg_pb2
+                    .SRv6VPNReply(message="Error: Unreachable zebra daemon"))
+        except UnreachableOspf6DaemonError:
+            return (srv6_vpn_msg_pb2
+                    .SRv6VPNReply(message="Error: Unreachable ospf6d daemon"))
         # Add local interface to the VRF associated to the VPN
-        ip_route.link('set', index=intf_index, master=vpn_index)
+        ip_route.link('set', index=ifindex, master=vpn_index)
         # Create the response
         return srv6_vpn_msg_pb2.SRv6VPNReply(message="OK")
 
     def RemoveLocalInterfaceFromVPN(self, request, context):
         logger.debug("config received:\n%s", request)
+        # Extract the name of the VPN from the request
+        vpn_name = str(request.vpn_name)
         # Extract the interface from the request
-        interface = str(request.interface)
-        # Delete all the prefix associated
-        # to the interface in the Quagga configuration
-        intf_index = ip_route.link_lookup(ifname=interface)[0]
-        for addr in ip_route.get_addr(index=intf_index):
-            # Get the ip address
-            ip = addr.get_attr("IFA_ADDRESS")
-            # Get the prefix length
-            prefixlen = addr.get("prefixlen")
-            # Log to zebra daemon and remove the prefix and delete
-            # the nd prefix and ip address associated to the interface
-            try:
-                password = "srv6"
-                port = 2601
-                # Init telnet
-                tn = telnetlib.Telnet("localhost", port)
-                # Password
-                tn.read_until("Password: ")
-                tn.write("%s\r\n" % password)
-                # Terminal length set to 0 to not have interruptions
-                tn.write("terminal length 0\r\n")
-                # Enable
-                tn.write("enable\r\n")
-                # Password
-                tn.read_until("Password: ")
-                tn.write("%s\r\n" % password)
-                # Configure terminal
-                tn.write("configure terminal\r\n")
-                # Interface configuration
-                tn.write("interface %s\r\n" % interface)
-                if addr.get("family") == socket.AF_INET6:
-                    # Remove the old IPv6 address
-                    old_ip = IPv6Interface(unicode("%s/%s"
-                                                   % (ip, str(prefixlen))))
-                    old_ip = str(old_ip)
-                    tn.write("no ipv6 address %s\r\n" % old_ip)
-                    # Remove the old IPv6 prefix
-                    old_net = (IPv6Interface(unicode("%s/%s"
-                                                     % (ip, str(prefixlen))))
-                               .network)
-                    old_net = str(old_net)
-                    tn.write("no ipv6 nd prefix %s\r\n" % old_net)
-                elif addr.get("prefixlen") == socket.AF_INET:
-                    # Remove the old IP address
-                    old_ip = IPv4Interface(unicode("%s/%s"
-                                                   % (ip, str(prefixlen))))
-                    old_ip = str(old_ip)
-                    tn.write("no ip address %s\r\n" % old_ip)
-                # Close interface configuration
-                tn.write("q" + "\r\n")
-                # Close configuration mode
-                tn.write("q" + "\r\n")
-                # Close privileged mode
-                tn.write("q" + "\r\n")
-                tn.read_all()
-                # Close telnet
-                tn.close()
-            except socket.error:
-                print ("Error: cannot establish a connection "
-                       "to %s on port %s" % (str("localhost"), str(port)))
-        # Log to ospf6d daemon
-        # and remove the interface from the ospf advertisements
+        ifname = str(request.ifname)
+        # Check if the vrf and the interface exist
+        if not existsInterface(ifname=ifname):
+            return (srv6_vpn_msg_pb2
+                    .SRv6VPNReply(message="Error: Invalid interface"))
+        if not existsVRF(vrf=vpn_name):
+            print "violazione remove loca"
+            return (srv6_vpn_msg_pb2
+                    .SRv6VPNReply(message="Error: Invalid VPN"))
+        if not isInterfaceInVRF(ifname=ifname, vrf=vpn_name):
+            return (srv6_vpn_msg_pb2
+                    .SRv6VPNReply(message="Error: Interface "
+                                  "does not belong to the VPN"))
+        # Get the index of the interface to be removed
+        ifindex = ip_route.link_lookup(ifname=ifname)[0]
         try:
-            password = "srv6"
-            port = 2606
-            # Init telnet
-            tn = telnetlib.Telnet("localhost", port)
-            # Password
-            tn.read_until("Password: ")
-            tn.write("%s\r\n" % password)
-            # Terminal length set to 0 to not have interruptions
-            tn.write("terminal length 0\r\n")
-            # Enable
-            tn.write("enable\r\n")
-            # Configure terminal
-            tn.write("configure terminal\r\n")
-            # Interface configuration
-            tn.write("router ospf6\r\n")
-            # Insert the interface in the link state messages
-            tn.write("interface %s area 0.0.0.0\r\n" % interface)
-            # Close interface configuration
-            tn.write("q" + "\r\n")
-            # Close configuration mode
-            tn.write("q" + "\r\n")
-            # Close privileged mode
-            tn.write("q" + "\r\n")
-            tn.read_all()
-            # Close telnet
-            tn.close()
-        except socket.error:
-            print ("Error: cannot establish a connection "
-                   "to %s on port %s" % (str("localhost"), str(port)))
+            # Delete all the addresses associated to the interface
+            _flushAddresses(ifname=ifname)
+            # Add the interface to the ospf advertisements
+            _turnOnInterfaceAdvertisements(ifname=ifname)
+        except InterfaceNotFoundError:
+            return (srv6_vpn_msg_pb2
+                    .SRv6VPNReply(message="Error: Invalid interface"))
+        except UnreachableZebraDaemonError:
+            return (srv6_vpn_msg_pb2
+                    .SRv6VPNReply(message="Error: Unreachable zebra daemon"))
+        except UnreachableOspf6DaemonError:
+            return (srv6_vpn_msg_pb2
+                    .SRv6VPNReply(message="Error: Unreachable ospf6d daemon"))
         # Remove local interface from the VRF associated to the VPN
-        ip_route.link('set', index=intf_index, master=0)
+        ip_route.link('set', index=ifindex, master=0)
         # Create the response
         return srv6_vpn_msg_pb2.SRv6VPNReply(message="OK")
 
     def AddRemoteInterfaceToVPN(self, request, context):
         logger.debug("config received:\n%s", request)
+        # Extract the VPN name from the request
+        vpn_name = str(request.vpn_name)
         # Extract the interfaces from the request
         interface = str(request.interface)
         # Extract the table id from the request
         tableid = request.tableid
         # Remove prefixlen from the sid
         sid = str(IPv6Interface(unicode(request.sid)).ip)
+        # Check if the VPN exists
+        if not existsVRF(vrf=vpn_name):
+            print "violazione add remote"
+            return srv6_vpn_msg_pb2.SRv6VPNReply(message="Error: Invalid VPN")
         # Get address family
         family = getAddressFamily(interface)
         if family is None:
             # Address family not supported
             return (srv6_vpn_msg_pb2
-                    .SRv6VPNReply(message="Error: address "
-                                  "family not supported"))
+                    .SRv6VPNReply(message="Error: Unsupported address family"))
+        if not validateTableId(tableid):
+            # Invalid table ID
+            return (srv6_vpn_msg_pb2
+                    .SRv6VPNReply(message="Error: Invalid table ID"))
+        if getAddressFamily(sid) != AF_INET6:
+            # Invalid SID
+            return (srv6_vpn_msg_pb2
+                    .SRv6VPNReply(message="Error: Invalid SID"))
         # Add encapsulation rule for the packets
         # destinated to remote site of the VPN
         try:
@@ -558,9 +775,7 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
                 # If a route for remote destination prefix already exists
                 # create the error response
                 return (srv6_vpn_msg_pb2
-                        .SRv6VPNReply(message="Error: a route for remote "
-                                      "destination %s already exists"
-                                      % interface))
+                        .SRv6VPNReply(message="Error: Duplicate route"))
             else:
                 return (srv6_vpn_msg_pb2
                         .SRv6VPNReply(message="Error: %s" % e.code))
@@ -569,9 +784,27 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
 
     def RemoveRemoteInterfaceFromVPN(self, request, context):
         logger.debug("config received:\n%s", request)
+        # Extract the VPN name from the request
+        vpn_name = str(request.vpn_name)
         # Extract interfaces and table id from the request
         interface = str(request.interface)
+        # Extract the table ID from the request
         tableid = request.tableid
+        # Check if the VPN exists
+        if not existsVRF(vrf=vpn_name):
+            print "violazione remove remote"
+            print vpn_name
+            return srv6_vpn_msg_pb2.SRv6VPNReply(message="Error: Invalid VPN")
+        # Get address family
+        family = getAddressFamily(interface)
+        if family is None:
+            # Address family not supported
+            return (srv6_vpn_msg_pb2
+                    .SRv6VPNReply(message="Error: Unsupported address family"))
+        if not validateTableId(tableid):
+            # Invalid table ID
+            return (srv6_vpn_msg_pb2
+                    .SRv6VPNReply(message="Error: Invalid table ID"))
         # Remove encapsulation rule from the table associated to the VPN
         try:
             ip_route.route("del", dst=interface, table=tableid)
@@ -580,9 +813,7 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
                 # If the destination SID to delete does not exists
                 # create the error response
                 return (srv6_vpn_msg_pb2
-                        .SRv6VPNReply(message="Error: a route for remote "
-                                      "destination %s does not exist"
-                                      % interface))
+                        .SRv6VPNReply(message="Error: Route not found"))
             else:
                 return (srv6_vpn_msg_pb2
                         .SRv6VPNReply(message="Error: %s" % e.code))
@@ -592,50 +823,52 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
     def RemoveVPN(self, request, context):
         logger.debug("Remove VPN request received:\n%s", request)
         # Extract name, table id and sid from the request
-        name = str(request.name)
+        vpn_name = str(request.vpn_name)
         tableid = request.tableid
         sid = str(request.sid)
+        # Check if the VPN exists
+        if not existsVRF(vrf=vpn_name):
+            return (srv6_vpn_msg_pb2
+                    .SRv6VPNReply(message="Error: VPN not found"))
+        if not validateTableId(tableid):
+            # Invalid table ID
+            return (srv6_vpn_msg_pb2
+                    .SRv6VPNReply(message="Error: Invalid table ID"))
+        if getAddressFamily(sid) != AF_INET6:
+            # Invalid SID
+            return (srv6_vpn_msg_pb2
+                    .SRv6VPNReply(message="Error: Invalid SID"))
         # Delete SID associated to the VPN from local SIDs table
         try:
-            ip_route.route("del", family=socket.AF_INET6, dst=sid, table=1)
-        except NetlinkError as e:
-            if e.code == NETLINK_ERROR_NO_SUCH_PROCESS:
-                # If the destination SID to delete does not exists
-                # create the error response
-                return (srv6_vpn_msg_pb2
-                        .SRv6VPNReply(message="Error: the destination "
-                                      "SID %s does not exist" % sid))
-            else:
-                return (srv6_vpn_msg_pb2
-                        .SRv6VPNReply(message="Error: %s" % e.code))
-        # Delete SID rule for the routing policy associated to the VPN
-        try:
-            ip_route.rule("del", family=socket.AF_INET6,
+            ip_route.route("del", family=AF_INET6, dst=sid, table=1)
+            # Delete SID rule for the routing policy associated to the VPN
+            ip_route.rule("del", family=AF_INET6,
                           table=1, dst=sid, dst_len=64)
         except NetlinkError as e:
             if e.code == NETLINK_ERROR_NO_SUCH_PROCESS:
                 # If the destination SID to delete does not exists
                 # create the error response
                 return (srv6_vpn_msg_pb2
-                        .SRv6VPNReply(message="Error: the rule for "
-                                      "destination SID %s does not exist"
-                                      % sid))
+                        .SRv6VPNReply(message="Error: Route not found"))
+            else:
+                return (srv6_vpn_msg_pb2
+                        .SRv6VPNReply(message="Error: %s" % e.code))
         # Delete VRF associated to the VPN
         try:
-            ip_route.link("del", ifname=name, kind="vrf", vrf_table=tableid)
+            ip_route.link("del", ifname=vpn_name,
+                          kind="vrf", vrf_table=tableid)
         except NetlinkError as e:
             if e.code == NETLINK_ERROR_NO_SUCH_PROCESS:
                 # If the destination SID to delete does not exists
                 # create the error response
                 return (srv6_vpn_msg_pb2
-                        .SRv6VPNReply(message="Error: the VRF %s "
-                                      "does not exist" % name))
+                        .SRv6VPNReply(message="Error: VPN not found"))
             else:
                 return (srv6_vpn_msg_pb2
                         .SRv6VPNReply(message="Error: %s" % e.code))
         # Delete all remaining informations associated to the VPN
-        ip_route.flush_routes(family=socket.AF_INET6, table=tableid)
-        ip_route.flush_routes(family=socket.AF_INET, table=tableid)
+        ip_route.flush_routes(family=AF_INET6, table=tableid)
+        ip_route.flush_routes(family=AF_INET, table=tableid)
         # Create the response
         return srv6_vpn_msg_pb2.SRv6VPNReply(message="OK")
 
@@ -646,12 +879,149 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
         for vpn in response.vpns:
             # Create the request
             delRequest = srv6_vpn_msg_pb2.RemoveVPNRequest()
-            delRequest.name = vpn.name
+            delRequest.vpn_name = vpn.vpn_name
             delRequest.tableid = vpn.tableid
             delRequest.sid = vpn.sid
             self.RemoveVPN(delRequest, context)
         # Create the response
         return srv6_vpn_msg_pb2.SRv6VPNReply(message="OK")
+
+
+class InterfaceManager(interface_manager_pb2_grpc
+                       .InterfaceManagerServicer):
+
+    def AddIPv6AddressToInterface(self, request, context):
+        # Extract the interface from the request
+        ifname = str(request.ifname)
+        # Extract the ip address from the request
+        ip = str(request.ipaddr)
+        # Add IPv6 address
+        try:
+            _addIPv6Address(ifname=ifname, ip=ip)
+        except InterfaceNotFoundError:
+            return (interface_manager_pb2
+                    .InterfaceManagerReply(message="Error: Invalid interface"))
+        except InvalidAddressFamilyError:
+            return (interface_manager_pb2
+                    .InterfaceManagerReply(message="Error: Invalid address family"))
+        except UnreachableZebraDaemonError:
+            return (interface_manager_pb2
+                    .InterfaceManagerReply(message="Error: Unreachable zebra daemon"))
+        except UnreachableOspf6DaemonError:
+            return (interface_manager_pb2
+                    .InterfaceManagerReply(message="Error: Unreachable ospf6d daemon"))
+        # Create the response
+        return interface_manager_pb2.InterfaceManagerReply(message="OK")
+
+    def RemoveIPv6AddressFromInterface(self, request, context):
+        # Extract the interface from the request
+        ifname = str(request.interface)
+        # Extract the ip address from the request
+        ip = str(request.ipaddr)
+        # Remove IPv6 address
+        try:
+            _removeIPv6Address(ifname=ifname, ip=ip)
+        except InterfaceNotFoundError:
+            return (interface_manager_pb2
+                    .InterfaceManagerReply(message="Error: Invalid interface"))
+        except InvalidAddressFamilyError:
+            return (interface_manager_pb2
+                    .InterfaceManagerReply(message="Error: Invalid address family"))
+        except AddressNotFoundError:
+            return (interface_manager_pb2
+                    .InterfaceManagerReply(message="Error: Address not found"))
+        except UnreachableZebraDaemonError:
+            return (interface_manager_pb2
+                    .InterfaceManagerReply(message="Error: Unreachable zebra daemon"))
+        except UnreachableOspf6DaemonError:
+            return (interface_manager_pb2
+                    .InterfaceManagerReply(message="Error: Unreachable ospf6d daemon"))
+        # Create the response
+        return interface_manager_pb2.InterfaceManagerReply(message="OK")
+
+    def AddIPv4AddressToInterface(self, request, context):
+        # Extract the interface from the request
+        ifname = str(request.interface)
+        # Extract the ip address from the request
+        ip = str(request.ipaddr)
+        # Add IPv4 address
+        try:
+            _addIPv4Address(ifname=ifname, ip=ip)
+        except InterfaceNotFoundError:
+            return (interface_manager_pb2
+                    .InterfaceManagerReply(message="Error: Invalid interface"))
+        except InvalidAddressFamilyError:
+            return (interface_manager_pb2
+                    .InterfaceManagerReply(message="Error: Invalid address family"))
+        except AddressAlreadyAssignedError:
+            return (interface_manager_pb2
+                    .InterfaceManagerReply(message="Error: Address alreaady assigned"))
+        except UnreachableZebraDaemonError:
+            return (interface_manager_pb2
+                    .InterfaceManagerReply(message="Error: Unreachable zebra daemon"))
+        except UnreachableOspf6DaemonError:
+            return (interface_manager_pb2
+                    .InterfaceManagerReply(message="Error: Unreachable ospf6d daemon"))
+        # Create the response
+        return interface_manager_pb2.InterfaceManagerReply(message="OK")
+
+    def RemoveIPv4AddressFromInterface(self, request, context):
+        # Extract the interface from the request
+        ifname = str(request.interface)
+        # Extract the ip address from the request
+        ip = str(request.ipaddr)
+        # Remove IPv4 address
+        try:
+            _removeIPv4Address(ifname=ifname, ip=ip)
+        except InterfaceNotFoundError:
+            return (interface_manager_pb2
+                    .InterfaceManagerReply(message="Error: Invalid interface"))
+        except InvalidAddressFamilyError:
+            return (interface_manager_pb2
+                    .InterfaceManagerReply(message="Error: Invalid address family"))
+        except AddressNotFoundError:
+            return (interface_manager_pb2
+                    .InterfaceManagerReply(message="Error: Address not found"))
+        except UnreachableZebraDaemonError:
+            return (interface_manager_pb2
+                    .InterfaceManagerReply(message="Error: Unreachable zebra daemon"))
+        except UnreachableOspf6DaemonError:
+            return (interface_manager_pb2
+                    .InterfaceManagerReply(message="Error: Unreachable ospf6d daemon"))
+        # Create the response
+        return interface_manager_pb2.InterfaceManagerReply(message="OK")
+
+    def AddIPAddressToInterface(self, request, context):
+        # Extract the interface from the request
+        # ifname = str(request.ifname) # UNUSED
+        # Extract the ip address from the request
+        ip = request.ipaddr
+        # Get address family
+        family = getAddressFamily(ip)
+        # Process the request
+        if family == AF_INET6:
+            return self.AddIPv6AddressToInterface(request, context)
+        elif family == AF_INET:
+            return self.AddIPv4AddressToInterface(request, context)
+        else:
+            return (interface_manager_pb2
+                    .InterfaceManagerReply(message="Error: family not supported"))
+
+    def RemoveIPAddressFromInterface(self, request, context):
+        # Extract the interface from the request
+        # ifname = str(request.ifname) # UNUSED
+        # Extract the ip address from the request
+        ip = request.ipaddr
+        # Get address family
+        family = getAddressFamily(ip)
+        # Process the request
+        if family == AF_INET6:
+            return self.RemoveIPv6AddressFromInterface(request, context)
+        elif family == AF_INET:
+            return self.RemoveIPv4AddressFromInterface(request, context)
+        else:
+            return (interface_manager_pb2
+                    .InterfaceManagerReply(message="Error: family not supported"))
 
     # This method allows a gRPC client
     # to get notified when a Netlink message is received
@@ -678,7 +1048,7 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
             # Wait until a message from the Netlink socket is received
             e.wait()
             # New message received, create the response
-            response = srv6_vpn_msg_pb2.NetlinkNotification()
+            response = interface_manager_pb2_grpc.NetlinkNotification()
             # Add the netlink message to the response
             for n in self.nlmsg:
                 response.nlmsg[n] = str(self.nlmsg[n])
@@ -695,21 +1065,21 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
         # Get the interfaces
         links = dict()
         for link in ip_route.get_links():
-            if link.get_attr("IFLA_LINKINFO") and \
-              link.get_attr("IFLA_LINKINFO") \
-              .get_attr("IFLA_INFO_KIND") != "vrf":
+            if (link.get_attr("IFLA_LINKINFO") and
+                link.get_attr("IFLA_LINKINFO")
+                    .get_attr("IFLA_INFO_KIND") != "vrf"):
                 # Skip the VRFs
                 # Get the index of the interface
                 index = link.get("index")
                 # Get the name of the interface
-                name = link.get_attr("IFLA_IFNAME")
+                ifname = link.get_attr("IFLA_IFNAME")
                 # Get the MAC address of the interface
                 macaddr = link.get_attr("IFLA_ADDRESS")
                 # Save the interface
-                links[index] = (name, macaddr)
+                links[index] = (ifname, macaddr)
         # Get the addresses assigned to the interfaces
         addrs = dict()
-        for addr in ip_route.get_addr(family=socket.AF_INET6):
+        for addr in ip_route.get_addr():
             # Get the index of the interface
             index = addr.get("index")
             # Get the IP address of the interface
@@ -721,17 +1091,17 @@ class SRv6SouthboundVPN(srv6_vpn_sb_pb2_grpc.SRv6SouthboundVPNServicer):
         # Mapping interface name to MAC address and IP address
         interfaces = dict()
         for index in links:
-            name = links[index][0]
+            ifname = links[index][0]
             macaddr = links[index][1]
             ipaddr = addrs[index]
-            interfaces[name] = (macaddr, ipaddr)
+            interfaces[ifname] = (macaddr, ipaddr)
         # Create the response
-        response = srv6_vpn_msg_pb2.InterfacesList()
-        for intf_name in interfaces:
+        response = interface_manager_pb2.InterfacesList()
+        for ifname in interfaces:
             interface = response.interface.add()
-            interface.name = intf_name
-            interface.macaddr = interfaces[intf_name][0]
-            for addr in interfaces[intf_name][1]:
+            interface.ifname = ifname
+            interface.macaddr = interfaces[ifname][0]
+            for addr in interfaces[ifname][1]:
                 interface.ipaddr.append(addr)
         return response
 
@@ -752,6 +1122,9 @@ def start_server():
         (srv6_vpn_sb_pb2_grpc
          .add_SRv6SouthboundVPNServicer_to_server(SRv6SouthboundVPN(),
                                                   grpc_server))
+        (interface_manager_pb2_grpc
+         .add_InterfaceManagerServicer_to_server(InterfaceManager(),
+                                                 grpc_server))
         # If secure we need to create a secure endpoint
         if SECURE:
             # Read key and certificate
@@ -762,7 +1135,7 @@ def start_server():
             # Create server ssl credentials
             grpc_server_credentials = (grpc
                                        .ssl_server_credentials(((key,
-                                                               certificate,),)))
+                                                               certificate),)))
             # Create a secure endpoint
             grpc_server.add_secure_port("[%s]:%s" % (GRPC_IP, GRPC_PORT),
                                         grpc_server_credentials)
