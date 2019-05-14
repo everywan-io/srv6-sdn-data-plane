@@ -1048,7 +1048,7 @@ class InterfaceManager(interface_manager_pb2_grpc
             # Wait until a message from the Netlink socket is received
             e.wait()
             # New message received, create the response
-            response = interface_manager_pb2_grpc.NetlinkNotification()
+            response = interface_manager_pb2.NetlinkNotification()
             # Add the netlink message to the response
             for n in self.nlmsg:
                 response.nlmsg[n] = str(self.nlmsg[n])
