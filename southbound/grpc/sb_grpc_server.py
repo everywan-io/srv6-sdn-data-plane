@@ -84,7 +84,6 @@ OSPF6D_PORT = 2606
 PASSWORD = 'srv6'
 
 
-
 def _addIPv6Address(ifname, ip):
     global ZEBRA_PORT, PASSWORD
     # Check if interface is valid
@@ -134,6 +133,7 @@ def _addIPv6Address(ifname, ip):
         tn.close()
     except socket.error:
         raise UnreachableZebraDaemonError
+
 
 def _removeIPv6Address(ifname, ip=None):
     global ZEBRA_PORT, PASSWORD
@@ -203,6 +203,7 @@ def _removeIPv6Address(ifname, ip=None):
     except socket.error:
         raise UnreachableZebraDaemonError
 
+
 def _addIPv4Address(ifname, ip):
     global ZEBRA_PORT, PASSWORD
     # Check if interface is valid
@@ -255,6 +256,7 @@ def _addIPv4Address(ifname, ip):
         tn.close()
     except socket.error:
         raise UnreachableZebraDaemonError
+
 
 def _removeIPv4Address(ifname, ip=None):
     global ZEBRA_PORT, PASSWORD
@@ -316,6 +318,7 @@ def _removeIPv4Address(ifname, ip=None):
     except socket.error:
         raise UnreachableZebraDaemonError
 
+
 def _flushAddresses(ifname, family=AF_UNSPEC):
     # Check if interface is valid
     if not existsInterface(ifname=ifname):
@@ -333,6 +336,7 @@ def _flushAddresses(ifname, family=AF_UNSPEC):
     else:
         # Family is invalid
         raise InvalidAddressFamilyError
+
 
 def _turnOnInterfaceAdvertisements(ifname):
     global OSPF6D_PORT, PASSWORD
@@ -372,6 +376,7 @@ def _turnOnInterfaceAdvertisements(ifname):
         tn.close()
     except socket.error:
         raise UnreachableOspf6DaemonError
+
 
 def _turnOffInterfaceAdvertisements(ifname):
     global OSPF6D_PORT, PASSWORD
@@ -900,16 +905,20 @@ class InterfaceManager(interface_manager_pb2_grpc
             _addIPv6Address(ifname=ifname, ip=ip)
         except InterfaceNotFoundError:
             return (interface_manager_pb2
-                    .InterfaceManagerReply(message="Error: Invalid interface"))
+                    .InterfaceManagerReply(message="Error: "
+                                           "Invalid interface"))
         except InvalidAddressFamilyError:
             return (interface_manager_pb2
-                    .InterfaceManagerReply(message="Error: Invalid address family"))
+                    .InterfaceManagerReply(message="Error: "
+                                           "Invalid address family"))
         except UnreachableZebraDaemonError:
             return (interface_manager_pb2
-                    .InterfaceManagerReply(message="Error: Unreachable zebra daemon"))
+                    .InterfaceManagerReply(message="Error: "
+                                           "Unreachable zebra daemon"))
         except UnreachableOspf6DaemonError:
             return (interface_manager_pb2
-                    .InterfaceManagerReply(message="Error: Unreachable ospf6d daemon"))
+                    .InterfaceManagerReply(message="Error: "
+                                           "Unreachable ospf6d daemon"))
         # Create the response
         return interface_manager_pb2.InterfaceManagerReply(message="OK")
 
@@ -923,19 +932,24 @@ class InterfaceManager(interface_manager_pb2_grpc
             _removeIPv6Address(ifname=ifname, ip=ip)
         except InterfaceNotFoundError:
             return (interface_manager_pb2
-                    .InterfaceManagerReply(message="Error: Invalid interface"))
+                    .InterfaceManagerReply(message="Error: "
+                                           "Invalid interface"))
         except InvalidAddressFamilyError:
             return (interface_manager_pb2
-                    .InterfaceManagerReply(message="Error: Invalid address family"))
+                    .InterfaceManagerReply(message="Error: "
+                                           "Invalid address family"))
         except AddressNotFoundError:
             return (interface_manager_pb2
-                    .InterfaceManagerReply(message="Error: Address not found"))
+                    .InterfaceManagerReply(message="Error: "
+                                           "Address not found"))
         except UnreachableZebraDaemonError:
             return (interface_manager_pb2
-                    .InterfaceManagerReply(message="Error: Unreachable zebra daemon"))
+                    .InterfaceManagerReply(message="Error: "
+                                           "Unreachable zebra daemon"))
         except UnreachableOspf6DaemonError:
             return (interface_manager_pb2
-                    .InterfaceManagerReply(message="Error: Unreachable ospf6d daemon"))
+                    .InterfaceManagerReply(message="Error: "
+                                           "Unreachable ospf6d daemon"))
         # Create the response
         return interface_manager_pb2.InterfaceManagerReply(message="OK")
 
@@ -949,19 +963,24 @@ class InterfaceManager(interface_manager_pb2_grpc
             _addIPv4Address(ifname=ifname, ip=ip)
         except InterfaceNotFoundError:
             return (interface_manager_pb2
-                    .InterfaceManagerReply(message="Error: Invalid interface"))
+                    .InterfaceManagerReply(message="Error: "
+                                           "Invalid interface"))
         except InvalidAddressFamilyError:
             return (interface_manager_pb2
-                    .InterfaceManagerReply(message="Error: Invalid address family"))
+                    .InterfaceManagerReply(message="Error: "
+                                           "Invalid address family"))
         except AddressAlreadyAssignedError:
             return (interface_manager_pb2
-                    .InterfaceManagerReply(message="Error: Address alreaady assigned"))
+                    .InterfaceManagerReply(message="Error: "
+                                           "Address alreaady assigned"))
         except UnreachableZebraDaemonError:
             return (interface_manager_pb2
-                    .InterfaceManagerReply(message="Error: Unreachable zebra daemon"))
+                    .InterfaceManagerReply(message="Error: "
+                                           "Unreachable zebra daemon"))
         except UnreachableOspf6DaemonError:
             return (interface_manager_pb2
-                    .InterfaceManagerReply(message="Error: Unreachable ospf6d daemon"))
+                    .InterfaceManagerReply(message="Error: "
+                                           "Unreachable ospf6d daemon"))
         # Create the response
         return interface_manager_pb2.InterfaceManagerReply(message="OK")
 
@@ -975,19 +994,24 @@ class InterfaceManager(interface_manager_pb2_grpc
             _removeIPv4Address(ifname=ifname, ip=ip)
         except InterfaceNotFoundError:
             return (interface_manager_pb2
-                    .InterfaceManagerReply(message="Error: Invalid interface"))
+                    .InterfaceManagerReply(message="Error: "
+                                           "Invalid interface"))
         except InvalidAddressFamilyError:
             return (interface_manager_pb2
-                    .InterfaceManagerReply(message="Error: Invalid address family"))
+                    .InterfaceManagerReply(message="Error: "
+                                           "Invalid address family"))
         except AddressNotFoundError:
             return (interface_manager_pb2
-                    .InterfaceManagerReply(message="Error: Address not found"))
+                    .InterfaceManagerReply(message="Error: "
+                                           "Address not found"))
         except UnreachableZebraDaemonError:
             return (interface_manager_pb2
-                    .InterfaceManagerReply(message="Error: Unreachable zebra daemon"))
+                    .InterfaceManagerReply(message="Error: "
+                                           "Unreachable zebra daemon"))
         except UnreachableOspf6DaemonError:
             return (interface_manager_pb2
-                    .InterfaceManagerReply(message="Error: Unreachable ospf6d daemon"))
+                    .InterfaceManagerReply(message="Error: "
+                                           "Unreachable ospf6d daemon"))
         # Create the response
         return interface_manager_pb2.InterfaceManagerReply(message="OK")
 
