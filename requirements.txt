@@ -1,6 +1,5 @@
 enum34==1.1.6
 futures==3.2.0
-grpc==0.3.post19
 grpcio==1.19.0
 grpcio-tools==1.19.0
 ipaddress==1.0.22

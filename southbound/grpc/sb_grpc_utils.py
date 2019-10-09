@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Server of a Northbound interface based on gRPC protocol
+# Utils for SRv6 gRPC Southbound
 #
 # @author Carmine Scarpitta <carmine.scarpitta.94@gmail.com>
 # @author Pier Luigi Ventre <pier.luigi.ventre@uniroma2.it>
@@ -71,3 +71,11 @@ def getAddressFamily(ip):
     else:
         # Invalid address
         return None
+
+
+class SouthboundGRPCError(Exception):
+    pass
+
+
+class InvalidAddressFamilyError(SouthboundGRPCError):
+    pass
