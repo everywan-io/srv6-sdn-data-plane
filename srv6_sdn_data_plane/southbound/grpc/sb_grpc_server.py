@@ -759,6 +759,64 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
         except NetlinkError as e:
             return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
 
+    def HandleIPVxLANRequest(self, op, request, context):
+        logger.debug("config received:\n%s", request)
+        # Let's process the request
+        for vxlan in request.vxlan:
+            # Extract params from the request
+            ifname = vxlan.ifname
+            vxlan_link = vxlan.vxlan_link
+            vxlan_id = vxlan.vxlan_id
+            # Let's push the vxlan command 
+            if op == 'add':
+                ip_route.link(op,
+                              ifname=ifname,
+                              kind="vxlan",
+                              vxlan_link=ip_route.link_lookup(ifname=vxlan_link)[0],
+                              vxlan_id=vxlan_id,
+                              vxlan_port=4789)
+                ip_route.link('set', 
+                              index=ip_route.link_lookup(ifname=ifname)[0], 
+                              state='up')
+            # Delete VTEP interface 
+            elif op == 'del':
+                ip_route.link("del", 
+                        index=ip_route.link_lookup(ifname=ifname)[0])
+
+            else:
+                # Operation unknown: this is a bug
+                print 'Unrecognized operation'
+                exit(-1)
+        # and create the response
+        return srv6_manager_pb2.SRv6ManagerReply(message="OK")
+
+    def HandleIPfdbentriesRequest(self, op, request, context):
+        logger.debug("config received:\n%s", request)
+        # Let's process the request
+        for fdbentries in request.fdbentries:
+            # Extract params from the request
+            ifindex = fdbentries.ifindex
+            dst = fdbentries.dst
+            # Let's push the fdb append command 
+            if op == 'add':
+                ip_route.fdb('append',
+                              ifindex=ip_route.link_lookup(ifname=ifindex)[0],
+                              lladdr='00:00:00:00:00:00',
+                              dst=dst)
+
+            elif op == 'del':
+                ip_route.fdb('del',
+                              ifindex=ip_route.link_lookup(ifname=ifindex)[0],
+                              lladdr='00:00:00:00:00:00',
+                              dst=dst)
+
+            else:
+                # Operation unknown: this is a bug
+                print 'Unrecognized operation'
+                exit(-1)
+        # and create the response
+        return srv6_manager_pb2.SRv6ManagerReply(message="OK")
+
     def Execute(self, op, request, context):
         entity_type = request.entity_type
         # Handle operation
@@ -792,6 +850,12 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
         elif entity_type == srv6_manager_pb2.GREInterface:
             request = request.gre_interface_request
             return self.HandleGREInterfaceRequest(op, request, context)
+        elif entity_type == srv6_manager_pb2.IPVxlan:
+            request = request.ipvxlan_request
+            return self.HandleIPVxLANRequest(op, request, context)
+        elif entity_type == srv6_manager_pb2.IPfdbentries:
+            request = request.fdbentries_request
+            return self.HandleIPfdbentriesRequest(op, request, context)    
         else:
             return (srv6_manager_pb2
                     .SRv6ManagerReply(status=status_codes_pb2.STATUS_INVALID_GRPC_REQUEST))
