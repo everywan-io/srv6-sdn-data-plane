@@ -4,6 +4,7 @@
 from __future__ import absolute_import, division, print_function
 
 # General imports
+from six import text_type
 from argparse import ArgumentParser
 import socket
 import logging
@@ -403,8 +404,8 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                     preferred_source = (preferred_source
                                         if preferred_source != '' else None)
                     src_len = src_len if src_len != -1 else None
-                    in_interface = in_interface if in_interface != '' else None
-                    out_interface = out_interface if out_interface != '' else None
+                    in_interface = ip_route.link_lookup(ifname=in_interface)[0] if in_interface != '' else None
+                    out_interface = ip_route.link_lookup(ifname=out_interface)[0] if out_interface != '' else None
                     gateway = gateway if gateway != '' else None
                     # Let's push the route
                     if destination is None and op == 'del':
@@ -529,6 +530,7 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
             return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
 
     def HandleVRFDeviceRequest(self, op, request, context):
+        print('VRF DEVICE REQ', op)
         logger.debug('config received:\n%s', request)
         # Let's process the request
         try:
@@ -581,6 +583,7 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                                 ip_route.link('set', index=ifindex, master=0)
                     # Add the remaining links to the VRF
                     for interface in interfaces:
+                        print('INTERFACE', interface)
                         ifindex = ip_route.link_lookup(ifname=interface)[0]
                         ip_route.link('set', index=ifindex, master=vrfindex)
                     return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
@@ -705,6 +708,57 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
         except NetlinkError as e:
             return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
 
+    def HandleIPNeighRequest(self, op, request, context):
+        logger.debug('config received:\n%s', request)
+        # Let's process the request
+        try:
+            if op == 'add' or op == 'del':
+                for neigh in request.neighs:
+                    # Extract params from the request
+                    family = neigh.family
+                    addr = neigh.addr
+                    lladdr = neigh.lladdr
+                    device = neigh.device
+                    # Create or delete the neigh
+                    device = ip_route.link_lookup(ifname=device)[0]
+                    ip_route.neigh(op, family=family, dst=addr, proxy=lladdr, ifindex=device)
+            else:
+                # Operation unknown: this is a bug
+                logger.error('Unrecognized operation: %s' % op)
+            # and create the response
+            logger.debug('Send response: OK')
+            return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+        except NetlinkError as e:
+            return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
+
+    def HandleGREInterfaceRequest(self, op, request, context):
+        logger.debug('config received:\n%s', request)
+        # Let's process the request
+        try:
+            if op == 'add' or op == 'del':
+                for gre_interface in request.gre_interfaces:
+                    # Extract params from the request
+                    name = gre_interface.name
+                    local = gre_interface.local
+                    remote = gre_interface.remote
+                    # Check optional params
+                    local = local if local != '' else None
+                    remote = remote if remote != '' else None
+                    # Create or delete the neigh
+                    ip_route.link(op, ifname=name, kind='ip6gre',
+                                  ip6gre_local=local, ip6gre_remote=remote)
+                    # Enable the new GRE interface
+                    greindex = ip_route.link_lookup(ifname=name)[0]
+                    ip_route.link('set', index=greindex, state='up')
+            else:
+                # Operation unknown: this is a bug
+                logger.error('Unrecognized operation: %s' % op)
+            # and create the response
+            logger.debug('Send response: OK')
+            return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+        except NetlinkError as e:
+            return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
+
     def Execute(self, op, request, context):
         entity_type = request.entity_type
         # Handle operation
@@ -732,6 +786,12 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
         elif entity_type == srv6_manager_pb2.Interface:
             request = request.interface_request
             return self.HandleInterfaceRequest(op, request, context)
+        elif entity_type == srv6_manager_pb2.IPNeigh:
+            request = request.ipneigh_request
+            return self.HandleIPNeighRequest(op, request, context)
+        elif entity_type == srv6_manager_pb2.GREInterface:
+            request = request.gre_interface_request
+            return self.HandleGREInterfaceRequest(op, request, context)
         else:
             return (srv6_manager_pb2
                     .SRv6ManagerReply(status=status_codes_pb2.STATUS_INVALID_GRPC_REQUEST))
