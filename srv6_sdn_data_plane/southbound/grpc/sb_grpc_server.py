@@ -57,6 +57,7 @@ from srv6_sdn_proto import srv6_manager_pb2
 from srv6_sdn_proto import status_codes_pb2
 from srv6_sdn_proto import network_events_listener_pb2
 from srv6_sdn_proto import network_events_listener_pb2_grpc
+from srv6_sdn_proto import gre_interface_pb2
 #from .sb_grpc_utils import InvalidAddressFamilyError
 from .sb_grpc_utils import InvalidAddressFamilyError
 
@@ -741,12 +742,25 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                     name = gre_interface.name
                     local = gre_interface.local
                     remote = gre_interface.remote
+                    key = gre_interface.key
+                    type = gre_interface.type
                     # Check optional params
                     local = local if local != '' else None
                     remote = remote if remote != '' else None
-                    # Create or delete the neigh
-                    ip_route.link(op, ifname=name, kind='ip6gre',
-                                  ip6gre_local=local, ip6gre_remote=remote)
+                    key = key if key != -1 else None
+                    if type == gre_interface_pb2.IP6GRE:
+                        # Create or delete the gre interface
+                        ip_route.link(op, ifname=name, kind='ip6gre',
+                                    ip6gre_local=local, ip6gre_remote=remote,
+                                    ip6gre_key=key)
+                    if type == gre_interface_pb2.GRE:
+                        # Create or delete the gre interface
+                        ip_route.link(op, ifname=name, kind='gre',
+                                      gre_local=local, gre_remote=remote,
+                                      gre_key=key)
+                    else:
+                        logging.warning('Unrecognized GRE type: %s' % type)
+                        return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_INTERNAL_ERROR)
                     # Enable the new GRE interface
                     greindex = ip_route.link_lookup(ifname=name)[0]
                     ip_route.link('set', index=greindex, state='up')
@@ -785,7 +799,7 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
 
             else:
                 # Operation unknown: this is a bug
-                print 'Unrecognized operation'
+                print('Unrecognized operation')
                 exit(-1)
         # and create the response
         return srv6_manager_pb2.SRv6ManagerReply(message="OK")
@@ -812,7 +826,7 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
 
             else:
                 # Operation unknown: this is a bug
-                print 'Unrecognized operation'
+                print('Unrecognized operation')
                 exit(-1)
         # and create the response
         return srv6_manager_pb2.SRv6ManagerReply(message="OK")
