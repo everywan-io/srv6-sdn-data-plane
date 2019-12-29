@@ -802,7 +802,7 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                 print('Unrecognized operation')
                 exit(-1)
         # and create the response
-        return srv6_manager_pb2.SRv6ManagerReply(message="OK")
+        return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
 
     def HandleIPfdbentriesRequest(self, op, request, context):
         logger.debug("config received:\n%s", request)
@@ -829,7 +829,7 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                 print('Unrecognized operation')
                 exit(-1)
         # and create the response
-        return srv6_manager_pb2.SRv6ManagerReply(message="OK")
+        return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
 
     def Execute(self, op, request, context):
         entity_type = request.entity_type
