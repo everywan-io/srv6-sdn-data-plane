@@ -474,18 +474,20 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                         # Get IP address
                         ip = str(addr.ip_addr)
                         # Get network prefix
-                        prefix = str(addr.net)
+                        prefix = str(addr.net) if addr.net != '' else None
                         # Interface configuration
                         tn.write(('interface %s\r\n' % device).encode('latin-1'))
                         if family == AF_INET6:
                             if op == 'del':
                                 # Remove IPv6 address
                                 tn.write(('no ipv6 address %s\r\n' % ip).encode('latin-1'))
-                                tn.write(('no ipv6 nd prefix %s\r\n' % prefix).encode('latin-1'))
+                                if prefix is not None:
+                                    tn.write(('no ipv6 nd prefix %s\r\n' % prefix).encode('latin-1'))
                             else:
                                 # Add IPv6 address
                                 tn.write(('ipv6 address %s\r\n' % ip).encode('latin-1'))
-                                tn.write(('ipv6 nd prefix %s\r\n' % prefix).encode('latin-1'))
+                                if prefix is not None:
+                                    tn.write(('ipv6 nd prefix %s\r\n' % prefix).encode('latin-1'))
                         elif family == AF_INET:
                             if op == 'del':
                                 # Remove IPv4 address
@@ -497,7 +499,8 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                             if op == 'del':
                                 # Remove IPv6 address
                                 tn.write(('no ipv6 address %s\r\n' % ip).encode('latin-1'))
-                                tn.write(('no ipv6 nd prefix %s\r\n' % prefix).encode('latin-1'))
+                                if prefix is not None:
+                                    tn.write(('no ipv6 nd prefix %s\r\n' % prefix).encode('latin-1'))
                                 # Remove IPv4 address
                                 tn.write(('no ip address %s\r\n' % ip).encode('latin-1'))
                             else:
@@ -566,28 +569,52 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                     return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
             elif op == 'change':
                 for device in request.devices:
-                    # Get the interfaces to be added to the VRF
-                    interfaces = []
-                    for interface in device.interfaces:
-                        interfaces.append(interface)
-                    # Get the VRF index
-                    vrfindex = ip_route.link_lookup(ifname=device.name)[0]
-                    # For each link in the VRF
-                    for link in ip_route.get_links():
-                        if link.get_attr('IFLA_MASTER') == vrfindex:
-                            if link.get_attr('IFLA_IFNAME') in interfaces:
-                                # The link belongs to the VRF
-                                interfaces.remove(link.get_attr('IFLA_IFNAME'))
-                            else:
-                                # The link has to be removed from the VRF
-                                ifindex = link.get('index')
-                                ip_route.link('set', index=ifindex, master=0)
-                    # Add the remaining links to the VRF
-                    for interface in interfaces:
-                        print('INTERFACE', interface)
-                        ifindex = ip_route.link_lookup(ifname=interface)[0]
-                        ip_route.link('set', index=ifindex, master=vrfindex)
-                    return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+                    if device.op == 'add_interfaces':
+                        # Get the VRF index
+                        vrfindex = ip_route.link_lookup(ifname=device.name)[0]
+                        # Add the remaining links to the VRF
+                        for interface in device.interfaces:
+                            ifindex = ip_route.link_lookup(ifname=interface)[0]
+                            ip_route.link('set', index=ifindex, master=vrfindex)
+                        return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+                    elif device.op == 'del_interfaces':
+                        # Get the VRF index
+                        vrfindex = ip_route.link_lookup(ifname=device.name)[0]
+                        # For each link in the VRF
+                        interfaces_in_vrf = set()
+                        for link in ip_route.get_links():
+                            if link.get_attr('IFLA_MASTER') == vrfindex:
+                                interfaces_in_vrf.append(link.get_attr('IFLA_IFNAME'))
+                        # Add the remaining links to the VRF
+                        for interface in device.interfaces:
+                            if interface not in interfaces_in_vrf:
+                                logger.warning('Interface does not belong to the VRF')
+                                return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_NO_SUCH_DEVICE)
+                            ifindex = ip_route.link_lookup(ifname=interface)[0]
+                            ip_route.link('set', index=ifindex, master=0)
+                        return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+                    else:
+                        # Get the interfaces to be added to the VRF
+                        interfaces = []
+                        for interface in device.interfaces:
+                            interfaces.append(interface)
+                        # Get the VRF index
+                        vrfindex = ip_route.link_lookup(ifname=device.name)[0]
+                        # For each link in the VRF
+                        for link in ip_route.get_links():
+                            if link.get_attr('IFLA_MASTER') == vrfindex:
+                                if link.get_attr('IFLA_IFNAME') in interfaces:
+                                    # The link belongs to the VRF
+                                    interfaces.remove(link.get_attr('IFLA_IFNAME'))
+                                else:
+                                    # The link has to be removed from the VRF
+                                    ifindex = link.get('index')
+                                    ip_route.link('set', index=ifindex, master=0)
+                        # Add the remaining links to the VRF
+                        for interface in interfaces:
+                            ifindex = ip_route.link_lookup(ifname=interface)[0]
+                            ip_route.link('set', index=ifindex, master=vrfindex)
+                        return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
             else:
                 # Operation unknown: this is a bug
                 logger.error('Unrecognized operation: %s' % op)
