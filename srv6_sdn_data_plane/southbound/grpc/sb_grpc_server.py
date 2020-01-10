@@ -808,6 +808,7 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
             ifname = vxlan.ifname
             vxlan_link = vxlan.vxlan_link
             vxlan_id = vxlan.vxlan_id
+            vxlan_port = vxlan.vxlan_port
             # Let's push the vxlan command 
             if op == 'add':
                 ip_route.link(op,
@@ -815,7 +816,7 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                               kind="vxlan",
                               vxlan_link=ip_route.link_lookup(ifname=vxlan_link)[0],
                               vxlan_id=vxlan_id,
-                              vxlan_port=4789)
+                              vxlan_port=vxlan_port)
                 ip_route.link('set', 
                               index=ip_route.link_lookup(ifname=ifname)[0], 
                               state='up')
@@ -829,7 +830,7 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                 print('Unrecognized operation')
                 exit(-1)
         # and create the response
-        return srv6_manager_pb2.SRv6ManagerReply(message="OK")
+        return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
 
     def HandleIPfdbentriesRequest(self, op, request, context):
         logger.debug("config received:\n%s", request)
@@ -856,7 +857,7 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                 print('Unrecognized operation')
                 exit(-1)
         # and create the response
-        return srv6_manager_pb2.SRv6ManagerReply(message="OK")
+        return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
 
     def Execute(self, op, request, context):
         entity_type = request.entity_type
