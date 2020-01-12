@@ -546,6 +546,7 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                         # Enable the new VRF
                         vrfindex = ip_route.link_lookup(ifname=device.name)[0]
                         ip_route.link('set', index=vrfindex, state='up')
+                        '''
                         # Set the default route for the table
                         # (and hence default route for the VRF)
                         ip_route.route('add', table=device.table,
@@ -554,6 +555,8 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                         ip_route.route('add', table=device.table,
                                         type='unreachable', dst='default',
                                         priority=4278198272, family=AF_INET6)
+                        '''
+                    '''
                     elif op == 'del':
                         ip_route.route('del', table=device.table,
                                         type='unreachable',
@@ -561,6 +564,7 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                         ip_route.route('del', table=device.table,
                                         type='unreachable',
                                         dst='default', family=AF_INET6)
+                    '''
                 # and create the response
                 if op == 'add':
                     return self.HandleVRFDeviceRequest('change', request, context)
