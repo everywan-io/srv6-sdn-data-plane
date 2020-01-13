@@ -588,7 +588,7 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                         interfaces_in_vrf = set()
                         for link in ip_route.get_links():
                             if link.get_attr('IFLA_MASTER') == vrfindex:
-                                interfaces_in_vrf.append(link.get_attr('IFLA_IFNAME'))
+                                interfaces_in_vrf.add(link.get_attr('IFLA_IFNAME'))
                         # Add the remaining links to the VRF
                         for interface in device.interfaces:
                             if interface not in interfaces_in_vrf:
@@ -1058,7 +1058,7 @@ def start_server(grpc_ip=DEFAULT_GRPC_IP,
         # If secure we need to create a secure endpoint
         if secure:
             # Read key and certificate
-            with open(KEY) as f:
+            with open(key) as f:
                 key = f.read()
             with open(certificate) as f:
                 certificate = f.read()
