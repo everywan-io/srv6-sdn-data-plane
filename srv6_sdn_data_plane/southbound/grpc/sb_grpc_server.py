@@ -815,12 +815,15 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
             vxlan_port = vxlan.vxlan_port
             # Let's push the vxlan command 
             if op == 'add':
+                # Create VTEP
                 ip_route.link(op,
-                              ifname=ifname,
-                              kind="vxlan",
-                              vxlan_link=ip_route.link_lookup(ifname=vxlan_link)[0],
-                              vxlan_id=vxlan_id,
-                              vxlan_port=vxlan_port)
+                            ifname=ifname,
+                            kind="vxlan",
+                            vxlan_link=ip_route.link_lookup(ifname=vxlan_link)[0],
+                            vxlan_id=vxlan_id,
+                            vxlan_port=vxlan_port,
+                            vxlan_port_range={'low': vxlan_port, 'high': vxlan_port+1})
+                # Set UP VTEP             
                 ip_route.link('set', 
                               index=ip_route.link_lookup(ifname=ifname)[0], 
                               state='up')
