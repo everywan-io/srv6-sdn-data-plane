@@ -149,30 +149,39 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
     '''gRPC request handler'''
 
     def __init__(self, quagga_password=DEFAULT_QUAGGA_PASSWORD,
-                 zebra_port=DEFAULT_ZEBRA_PORT, ospf6d_port=DEFAULT_OSPF6D_PORT):
+                 zebra_port=DEFAULT_ZEBRA_PORT, ospf6d_port=DEFAULT_OSPF6D_PORT,
+                 stop_event=None):
         self.quagga_password = quagga_password
         self.zebra_port = zebra_port
         self.ospf6d_port = ospf6d_port
+        self.stop_event = stop_event
 
     def parse_netlink_error(self, e):
         if e.code == NETLINK_ERROR_FILE_EXISTS:
-            logger.warning('Netlink error: File exists')
+            logging.warning('Netlink error: File exists')
             return status_codes_pb2.STATUS_FILE_EXISTS
         elif e.code == NETLINK_ERROR_NO_SUCH_PROCESS:
-            logger.warning('Netlink error: No such process')
+            logging.warning('Netlink error: No such process')
             return status_codes_pb2.STATUS_NO_SUCH_PROCESS
         elif e.code == NETLINK_ERROR_NO_SUCH_DEVICE:
-            logger.warning('Netlink error: No such device')
+            logging.warning('Netlink error: No such device')
             return status_codes_pb2.STATUS_NO_SUCH_DEVICE
         elif e.code == NETLINK_ERROR_OPERATION_NOT_SUPPORTED:
-            logger.warning('Netlink error: Operation not supported')
+            logging.warning('Netlink error: Operation not supported')
             return status_codes_pb2.STATUS_OPERATION_NOT_SUPPORTED
         else:
-            logger.warning('Generic internal error: %s' % e)
+            logging.warning('Generic internal error: %s' % e)
             status_codes_pb2.STATUS_INTERNAL_ERROR
 
+    def ShutdownDevice(self, request, context):
+        logging.debug('\n\nShutdownDevice command received')
+        # Set the stop flag to trigger the server shutdown
+        self.stop_event.set()
+        return srv6_manager_pb2.SRv6ManagerReply(
+            status=status_codes_pb2.STATUS_SUCCESS)
+
     def HandleSRv6ExplicitPathRequest(self, op, request, context):
-        logger.debug('config received:\n%s', request)
+        logging.debug('config received:\n%s', request)
         # Perform operation
         try:
             if op == 'add' or 'del':
@@ -198,16 +207,16 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                                           'segs': segments})
             else:
                 # Operation unknown: this is a bug
-                logger.error('Unrecognized operation: %s' % op)
+                logging.error('Unrecognized operation: %s' % op)
                 exit(-1)
             # and create the response
-            logger.debug('Send response: OK')
+            logging.debug('Send response: OK')
             return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
         except NetlinkError as e:
             return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
 
     def HandleSRv6LocalProcessingFunctionRequest(self, op, request, context):
-        logger.debug('config received:\n%s', request)
+        logging.debug('config received:\n%s', request)
         # Let's process the request
         try:
             for function in request.functions:
@@ -315,20 +324,20 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                                               'action': 'End.B6.Encaps',
                                               'srh': {'segs': segments}})
                     else:
-                        logger.debug('Error: Unrecognized action')
+                        logging.debug('Error: Unrecognized action')
                         return (srv6_manager_pb2
                                 .SRv6ManagerReply(status=status_codes_pb2.STATUS_INVALID_ACTION))
                 else:
                     # Operation unknown: this is a bug
-                    logger.error('Unrecognized operation: %s' % op)
+                    logging.error('Unrecognized operation: %s' % op)
             # and create the response
-            logger.debug('Send response: OK')
+            logging.debug('Send response: OK')
             return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
         except NetlinkError as e:
             return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
 
     def HandleIPRuleRequest(self, op, request, context):
-        logger.debug('config received:\n%s', request)
+        logging.debug('config received:\n%s', request)
         # Let's process the request
         try:
             if op == 'add' or op == 'del':
@@ -366,15 +375,15 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                                   oifname=out_interface)
             else:
                 # Operation unknown: this is a bug
-                logger.error('Unrecognized operation: %s' % op)
+                logging.error('Unrecognized operation: %s' % op)
             # and create the response
-            logger.debug('Send response: OK')
+            logging.debug('Send response: OK')
             return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
         except NetlinkError as e:
             return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
 
     def HandleIPRouteRequest(self, op, request, context):
-        logger.debug('config received:\n%s', request)
+        logging.debug('config received:\n%s', request)
         # Let's process the request
         try:
             if op == 'add' or op == 'del':
@@ -429,15 +438,15 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                                        gateway=gateway, family=family)
             else:
                 # Operation unknown: this is a bug
-                logger.error('Unrecognized operation: %s' % op)
+                logging.error('Unrecognized operation: %s' % op)
             # and create the response
-            logger.debug('Send response: OK')
+            logging.debug('Send response: OK')
             return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
         except NetlinkError as e:
             return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
 
     def HandleIPAddrRequest(self, op, request, context):
-        logger.debug('config received:\n%s', request)
+        logging.debug('config received:\n%s', request)
         # Let's process the request
         try:
             if op == 'add' or op == 'del':
@@ -517,25 +526,25 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                     tn.read_all()
                     # Close telnet
                     tn.close()
-                    logger.debug('Send response: OK')
+                    logging.debug('Send response: OK')
                     return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
                 except socket.error:
-                    logger.debug('Send response: Unreachable zebra daemon')
+                    logging.debug('Send response: Unreachable zebra daemon')
                     return (srv6_manager_pb2
                             .SRv6ManagerReply(status=status_codes_pb2.STATUS_UNREACHABLE_ZEBRA))
                 except InvalidAddressFamilyError:
-                    logger.debug('Send response: Invalid address family')
+                    logging.debug('Send response: Invalid address family')
                     return (srv6_manager_pb2
                             .SRv6ManagerReply(status=status_codes_pb2.STATUS_INVALID_ADDRESS))
             else:
                 # Operation unknown: this is a bug
-                logger.error('Unrecognized operation: %s' % op)
+                logging.error('Unrecognized operation: %s' % op)
         except NetlinkError as e:
             return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
 
     def HandleVRFDeviceRequest(self, op, request, context):
         print('VRF DEVICE REQ', op)
-        logger.debug('config received:\n%s', request)
+        logging.debug('config received:\n%s', request)
         # Let's process the request
         try:
             if op == 'add' or op == 'del':
@@ -569,7 +578,7 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                 if op == 'add':
                     return self.HandleVRFDeviceRequest('change', request, context)
                 else:
-                    logger.debug('Send response: OK')
+                    logging.debug('Send response: OK')
                     return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
             elif op == 'change':
                 for device in request.devices:
@@ -592,7 +601,7 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                         # Add the remaining links to the VRF
                         for interface in device.interfaces:
                             if interface not in interfaces_in_vrf:
-                                logger.warning('Interface does not belong to the VRF')
+                                logging.warning('Interface does not belong to the VRF')
                                 return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_NO_SUCH_DEVICE)
                             ifindex = ip_route.link_lookup(ifname=interface)[0]
                             ip_route.link('set', index=ifindex, master=0)
@@ -621,12 +630,12 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                         return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
             else:
                 # Operation unknown: this is a bug
-                logger.error('Unrecognized operation: %s' % op)
+                logging.error('Unrecognized operation: %s' % op)
         except NetlinkError as e:
             return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
 
     def HandleInterfaceRequest(self, op, request, context):
-        logger.debug('config received:\n%s', request)
+        logging.debug('config received:\n%s', request)
         # Let's process the request
         try:
             if op == 'change':
@@ -670,10 +679,10 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                     tn.read_all()
                     # Close telnet
                     tn.close()
-                    logger.debug('Send response: OK')
+                    logging.debug('Send response: OK')
                     return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
                 except socket.error:
-                    logger.debug('Send response: Unreachable ospf6d daemon')
+                    logging.debug('Send response: Unreachable ospf6d daemon')
                     return (srv6_manager_pb2
                             .SRv6ManagerReply(status=status_codes_pb2.STATUS_UNREACHABLE_OSPF6D))
             elif op == 'get':
@@ -732,16 +741,16 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                     for addr in interfaces[ifname][1]:
                         interface.ipaddrs.append(addr)
                     interface.state = interfaces[ifname][2]
-                logger.debug('Send response:\n%s', response)
+                logging.debug('Send response:\n%s', response)
                 return response
             else:
                 # Operation unknown: this is a bug
-                logger.error('Unrecognized operation: %s' % op)
+                logging.error('Unrecognized operation: %s' % op)
         except NetlinkError as e:
             return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
 
     def HandleIPNeighRequest(self, op, request, context):
-        logger.debug('config received:\n%s', request)
+        logging.debug('config received:\n%s', request)
         # Let's process the request
         try:
             if op == 'add' or op == 'del':
@@ -756,15 +765,15 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                     ip_route.neigh(op, family=family, dst=addr, proxy=lladdr, ifindex=device)
             else:
                 # Operation unknown: this is a bug
-                logger.error('Unrecognized operation: %s' % op)
+                logging.error('Unrecognized operation: %s' % op)
             # and create the response
-            logger.debug('Send response: OK')
+            logging.debug('Send response: OK')
             return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
         except NetlinkError as e:
             return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
 
     def HandleGREInterfaceRequest(self, op, request, context):
-        logger.debug('config received:\n%s', request)
+        logging.debug('config received:\n%s', request)
         # Let's process the request
         try:
             if op == 'add' or op == 'del':
@@ -797,15 +806,15 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                     ip_route.link('set', index=greindex, state='up')
             else:
                 # Operation unknown: this is a bug
-                logger.error('Unrecognized operation: %s' % op)
+                logging.error('Unrecognized operation: %s' % op)
             # and create the response
-            logger.debug('Send response: OK')
+            logging.debug('Send response: OK')
             return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
         except NetlinkError as e:
             return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
 
     def HandleIPVxLANRequest(self, op, request, context):
-        logger.debug("config received:\n%s", request)
+        logging.debug("config received:\n%s", request)
         # Let's process the request
         for vxlan in request.vxlan:
             # Extract params from the request
@@ -840,7 +849,7 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
         return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
 
     def HandleIPfdbentriesRequest(self, op, request, context):
-        logger.debug("config received:\n%s", request)
+        logging.debug("config received:\n%s", request)
         # Let's process the request
         for fdbentries in request.fdbentries:
             # Extract params from the request
@@ -930,7 +939,7 @@ class NetworkEventsListener(network_events_listener_pb2_grpc
                             .NetworkEventsListenerServicer):
 
     def Listen(self, request, context):
-        logger.debug('config received:\n%s', request)
+        logging.debug('config received:\n%s', request)
         # Send an ACK message to the client
         message = network_events_listener_pb2.NetworkEvent()
         message.type = EVENT_TYPES['CONNECTION_ESTABLISHED']
@@ -942,7 +951,7 @@ class NetworkEventsListener(network_events_listener_pb2_grpc
             # Process messages
             for msg in evq:
                 if not context.is_active():
-                    logger.info('The client has been disconnected')
+                    logging.info('The client has been disconnected')
                     break
                 ifindex = None
                 ifname = None
@@ -1028,9 +1037,9 @@ class NetworkEventsListener(network_events_listener_pb2_grpc
                     response.interface.ipaddr = '%s/%s' % (ipaddr, prefixlen)
                 response.type = EVENT_TYPES[type]
                 # and send the response to the client
-                logger.debug('Send response:\n%s' % response)
+                logging.debug('Send response:\n%s' % response)
                 yield response
-        logger.info('Exiting from Listen()')
+        logging.info('Exiting from Listen()')
 
 
 # Start gRPC server
@@ -1044,15 +1053,17 @@ def start_server(grpc_ip=DEFAULT_GRPC_IP,
                  key=DEFAULT_KEY):
     # Configure gRPC server listener and ip route
     global grpc_server, ip_route, ipdb
+    # Stop event
+    stop_event = threading.Event()
     # Setup gRPC server
     if grpc_server is not None:
-        logger.error('gRPC Server is already up and running')
+        logging.error('gRPC Server is already up and running')
     else:
         # Create the server and add the handlers
         grpc_server = grpc.server(futures.ThreadPoolExecutor())
         (srv6_manager_pb2_grpc
          .add_SRv6ManagerServicer_to_server(
-             SRv6Manager(quagga_password, zebra_port, ospf6d_port),
+             SRv6Manager(quagga_password, zebra_port, ospf6d_port,stop_event),
              grpc_server)
         )
         (network_events_listener_pb2_grpc
@@ -1077,12 +1088,12 @@ def start_server(grpc_ip=DEFAULT_GRPC_IP,
             grpc_server.add_insecure_port('[%s]:%s' % (grpc_ip, grpc_port))
     # Setup ip route
     if ip_route is not None:
-        logger.error('IP Route is already setup')
+        logging.error('IP Route is already setup')
     else:
         ip_route = IPRoute()
     # Setup ipdb
     if ipdb is not None:
-        logger.error('IPDB is already setup')
+        logging.error('IPDB is already setup')
     else:
         ipdb = IPDB()
     # Resolve the interfaces
@@ -1092,10 +1103,14 @@ def start_server(grpc_ip=DEFAULT_GRPC_IP,
     for interface in interfaces:
         idxs[interface] = ip_route.link_lookup(ifname=interface)[0]
     # Start the loop for gRPC
-    logger.info('Listening gRPC')
+    logging.info('*** Listening gRPC')
     grpc_server.start()
-    while True:
-        time.sleep(5)
+    stop_event.wait()
+    logging.info('*** Terminating gRPC server')
+    grpc_server.stop(10).wait()
+    logging.info('*** Server terminated')
+    #while True:
+    #    time.sleep(5)
 
 
 # Parse options
@@ -1172,9 +1187,14 @@ if __name__ == '__main__':
     certificate = args.server_cert
     # Server key
     key = args.server_key
+    # Setup properly the logger
+    if args.debug:
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO)
     # Debug settings
     server_debug = logger.getEffectiveLevel() == logging.DEBUG
-    logger.info('SERVER_DEBUG:' + str(server_debug))
+    logging.info('SERVER_DEBUG:' + str(server_debug))
     # Start the server
     start_server(grpc_ip, grpc_port, quagga_password, zebra_port,
                  ospf6d_port, secure, certificate, key)
