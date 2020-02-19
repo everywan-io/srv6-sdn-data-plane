@@ -174,7 +174,7 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
             status_codes_pb2.STATUS_INTERNAL_ERROR
 
     def ShutdownDevice(self, request, context):
-        logging.debug('\n\nShutdownDevice command received')
+        logging.info('\n\nShutdownDevice command received')
         # Set the stop flag to trigger the server shutdown
         self.stop_event.set()
         return srv6_manager_pb2.SRv6ManagerReply(
@@ -543,7 +543,6 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
             return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
 
     def HandleVRFDeviceRequest(self, op, request, context):
-        print('VRF DEVICE REQ', op)
         logging.debug('config received:\n%s', request)
         # Let's process the request
         try:
