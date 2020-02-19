@@ -3,6 +3,7 @@
 from __future__ import print_function
 
 # General imports
+import configparser
 import time
 import os
 import sys
@@ -209,7 +210,7 @@ class EWEdgeDevice(object):
 # Parse arguments
 def parseArguments():
     # Get parser
-    parser = ArgumentParser(description='SRv6 Controller')
+    parser = ArgumentParser(description='EveryWAN Edge Device')
     # Enable debug logs
     parser.add_argument('-d', '--debug', action='store_true',
                         help='Activate debug logs')
@@ -289,8 +290,9 @@ def parseArguments():
     )
     # File containing the configuration of the device
     parser.add_argument(
-        '-c', '--config-file', dest='config_file',
-        default=DEFAULT_CONFIG_FILE, help='Config file'
+        '-f', '--device-config-file', dest='device_config_file',
+        default=DEFAULT_CONFIG_FILE,
+        help='Config file contining the configuration of the device'
     )
     # Interval between two consecutive keep alive messages
     parser.add_argument(
@@ -304,8 +306,95 @@ def parseArguments():
         default=DEFAULT_TOKEN_FILE,
         help='File containing the token used for the authentication'
     )
+    # Config file
+    parser.add_argument('-c', '--config-file', dest='config_file',
+                        action='store', default=None,
+                        help='Path of the configuration file')
     # Parse input parameters
     args = parser.parse_args()
+    # Done, return
+    return args
+
+
+# Parse a configuration file
+def parse_config_file(config_file):
+
+    class Args:
+        debug = None
+        verbose = None
+        sb_interface = None
+        grpc_server_ip = None
+        grpc_server_port = None
+        secure = None
+        server_key = None
+        quagga_password = None
+        zebra_port = None
+        ospf6d_port = None
+        pymerang_server_ip = None
+        pymerang_server_port = None
+        nat_discovery_server_ip = None
+        nat_discovery_server_port = None
+        nat_discovery_client_ip = None
+        nat_discovery_client_port = None
+        device_config_file = None
+        keep_alive_interval = None
+        token_file = None
+
+    args = Args()
+    # Get parser
+    config = configparser.ConfigParser()
+    # Read configuration file
+    config.read(config_file)
+    # Enable debug logs
+    args.debug = config['DEFAULT'].get('debug', False)
+    # Verbose mode
+    args.verbose = config['DEFAULT'].get('verbose', False)
+    # Southbound interface
+    args.sb_interface = config['DEFAULT'].get('sb_interface', DEFAULT_SB_INTERFACE)
+    # IP address of the southbound gRPC server
+    args.grpc_server_ip = config['DEFAULT'].get('grpc_server_ip', DEFAULT_GRPC_SERVER_IP)
+    # Port of the southbound gRPC server
+    args.grpc_server_port = config['DEFAULT'].get(
+        'grpc_server_port', DEFAULT_GRPC_SERVER_PORT)
+    # Enable secure mode
+    args.secure = config['DEFAULT'].get('secure', DEFAULT_SECURE)
+    # Server certificate
+    args.server_cert = config['DEFAULT'].get('server_cert', DEFAULT_CERTIFICATE)
+    # Server key
+    args.server_key = config['DEFAULT'].get('server_key', DEFAULT_KEY)
+    # Password used to log in to ospf6d and zebra daemons
+    args.quagga_password = config['DEFAULT'].get(
+        'quagga_password', DEFAULT_QUAGGA_PASSWORD)
+    # Port used to log in to zebra daemon
+    args.zebra_port = config['DEFAULT'].get('zebra_port', DEFAULT_ZEBRA_PORT)
+    # Port used to log in to ospf6d daemon
+    args.ospf6d_port = config['DEFAULT'].get('ospf6d_port', DEFAULT_OSPF6D_PORT)
+    # IP address of the gRPC registration server
+    args.pymerang_server_ip = config['DEFAULT'].get(
+        'pymerang_server_ip', DEFAULT_PYMERANG_SERVER_IP)
+    # Port of the gRPC server
+    args.pymerang_server_port = config['DEFAULT'].get(
+        'pymerang_server_port', DEFAULT_PYMERANG_SERVER_PORT)
+    # IP address of the NAT discovery server
+    args.nat_discovery_server_ip = config['DEFAULT'].get(
+        'nat_discovery_server_ip', DEFAULT_NAT_DISCOVERY_SERVER_IP)
+    # Port of the NAT discovery server
+    args.nat_discovery_server_port = config['DEFAULT'].get(
+        'nat_discovery_server_port', DEFAULT_NAT_DISCOVERY_SERVER_PORT)
+    # IP address used by the NAT discoery client
+    args.nat_discovery_client_ip = config['DEFAULT'].get(
+        'nat_discovery_client_ip', DEFAULT_PYMERANG_CLIENT_IP)
+    # Port used by the NAT discovery client
+    args.nat_discovery_client_port = config['DEFAULT'].get(
+        'nat_discovery_client_port', DEFAULT_NAT_DISCOVERY_CLIENT_PORT)
+    # File containing the configuration of the device
+    args.device_config_file = config['DEFAULT'].get(
+        'device_config_file', DEFAULT_CONFIG_FILE)
+    # Interval between two consecutive keep alive messages
+    args.keep_alive_interval = config['DEFAULT'].get(
+        'keep_alive_interval', DEFAULT_KEEP_ALIVE_INTERVAL)
+    # Interval between two consecutive keep alive messages
+    args.token_file = config['DEFAULT'].get('token_file', DEFAULT_TOKEN_FILE)
     # Done, return
     return args
 
@@ -313,6 +402,9 @@ def parseArguments():
 def _main():
     # Let's parse input parameters
     args = parseArguments()
+    # Check if a configuration file has been provided
+    if args.config_file is not None:
+        args = parse_config_file(args.config_file)
     # Verbose mode
     verbose = args.verbose
     # Southbound interface
@@ -360,7 +452,7 @@ def _main():
     # NAT discovery client port
     nat_discovery_client_port = args.nat_discovery_client_port
     # Config file
-    config_file = args.config_file
+    config_file = args.device_config_file
     # Interval between two consecutive keep alive messages
     keep_alive_interval = args.keep_alive_interval
     # File containing the token used for the authentication
@@ -371,8 +463,9 @@ def _main():
     logger.info('SERVER_DEBUG:' + str(SERVER_DEBUG))
     # Check interfaces file, dataplane and gRPC client paths
     if sb_interface not in SUPPORTED_SB_INTERFACES:
-        utils.print_and_die('Error: %s interface not yet supported or invalid\n'
-                            'Supported southbound interfaces: %s' % (sb_interface, SUPPORTED_SB_INTERFACES))
+        logging.error('Error: %s interface not yet supported or invalid\n'
+                      'Supported southbound interfaces: %s' % (sb_interface, SUPPORTED_SB_INTERFACES))
+        exit(-1)
     # Create a new EveryWAN Edge Device
     ew_edge_device = EWEdgeDevice(
         sb_interface=sb_interface,
