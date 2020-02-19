@@ -320,8 +320,10 @@ def _main():
     # Setup properly the logger
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
+        logging.getLogger().setLevel(level=logging.DEBUG)
     else:
         logging.basicConfig(level=logging.INFO)
+        logging.getLogger().setLevel(level=logging.INFO)
     # Setup properly the secure mode
     if args.secure:
         secure = True

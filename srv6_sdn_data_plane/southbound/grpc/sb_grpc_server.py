@@ -1162,11 +1162,6 @@ def parse_arguments():
 
 if __name__ == '__main__':
     args = parse_arguments()
-    # Setup properly the logger
-    if args.debug:
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.INFO)
     # Setup properly the secure mode
     if args.secure:
         secure = True
@@ -1189,8 +1184,10 @@ if __name__ == '__main__':
     # Setup properly the logger
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
+        logging.getLogger().setLevel(level=logging.DEBUG)
     else:
         logging.basicConfig(level=logging.INFO)
+        logging.getLogger().setLevel(level=logging.INFO)
     # Debug settings
     server_debug = logger.getEffectiveLevel() == logging.DEBUG
     logging.info('SERVER_DEBUG:' + str(server_debug))
