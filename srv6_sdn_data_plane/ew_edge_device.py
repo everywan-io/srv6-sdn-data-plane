@@ -297,7 +297,7 @@ def parseArguments():
     # Interval between two consecutive keep alive messages
     parser.add_argument(
         '-k', '--keep-alive-interval', dest='keep_alive_interval',
-        default=DEFAULT_KEEP_ALIVE_INTERVAL,
+        default=DEFAULT_KEEP_ALIVE_INTERVAL, type=int,
         help='Interval between two consecutive keep alive'
     )
     # Interval between two consecutive keep alive messages
@@ -391,8 +391,8 @@ def parse_config_file(config_file):
     args.device_config_file = config['DEFAULT'].get(
         'device_config_file', DEFAULT_CONFIG_FILE)
     # Interval between two consecutive keep alive messages
-    args.keep_alive_interval = config['DEFAULT'].get(
-        'keep_alive_interval', DEFAULT_KEEP_ALIVE_INTERVAL)
+    args.keep_alive_interval = int(config['DEFAULT'].get(
+        'keep_alive_interval', DEFAULT_KEEP_ALIVE_INTERVAL))
     # Interval between two consecutive keep alive messages
     args.token_file = config['DEFAULT'].get('token_file', DEFAULT_TOKEN_FILE)
     # Done, return
