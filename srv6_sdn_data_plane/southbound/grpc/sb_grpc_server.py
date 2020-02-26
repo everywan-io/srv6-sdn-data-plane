@@ -1049,11 +1049,10 @@ def start_server(grpc_ip=DEFAULT_GRPC_IP,
                  ospf6d_port=DEFAULT_OSPF6D_PORT,
                  secure=DEFAULT_SECURE,
                  certificate=DEFAULT_CERTIFICATE,
-                 key=DEFAULT_KEY):
+                 key=DEFAULT_KEY,
+                 stop_event=None):
     # Configure gRPC server listener and ip route
     global grpc_server, ip_route, ipdb
-    # Stop event
-    stop_event = threading.Event()
     # Setup gRPC server
     if grpc_server is not None:
         logging.error('gRPC Server is already up and running')
@@ -1062,7 +1061,7 @@ def start_server(grpc_ip=DEFAULT_GRPC_IP,
         grpc_server = grpc.server(futures.ThreadPoolExecutor())
         (srv6_manager_pb2_grpc
          .add_SRv6ManagerServicer_to_server(
-             SRv6Manager(quagga_password, zebra_port, ospf6d_port,stop_event),
+             SRv6Manager(quagga_password, zebra_port, ospf6d_port, stop_event),
              grpc_server)
         )
         (network_events_listener_pb2_grpc
