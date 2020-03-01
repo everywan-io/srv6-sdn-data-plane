@@ -1070,9 +1070,9 @@ def start_server(grpc_ip=DEFAULT_GRPC_IP,
         # If secure we need to create a secure endpoint
         if secure:
             # Read key and certificate
-            with open(key) as f:
+            with open(key, 'rb') as f:
                 key = f.read()
-            with open(certificate) as f:
+            with open(certificate, 'rb') as f:
                 certificate = f.read()
             # Create server ssl credentials
             grpc_server_credentials = (grpc
