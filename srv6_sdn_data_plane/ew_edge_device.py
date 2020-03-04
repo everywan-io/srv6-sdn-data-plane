@@ -79,7 +79,9 @@ class EWEdgeDevice(object):
 
     def __init__(self, sb_interface=DEFAULT_SB_INTERFACE,
                  secure=DEFAULT_SECURE,
-                 key=DEFAULT_KEY, certificate=DEFAULT_CERTIFICATE,
+                 server_key=DEFAULT_KEY,
+                 server_certificate=DEFAULT_CERTIFICATE,
+                 client_certificate=DEFAULT_CERTIFICATE,
                  grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
                  grpc_server_port=DEFAULT_GRPC_SERVER_PORT,
                  quagga_password=DEFAULT_QUAGGA_PASSWORD,
@@ -106,9 +108,11 @@ class EWEdgeDevice(object):
         # Secure mode
         self.secure = secure
         # Server key
-        self.key = key
+        self.server_key = server_key
         # Server certificate
-        self.certificate = certificate
+        self.server_certificate = server_certificate
+        # Client certificate
+        self.client_certificate = client_certificate
         # IP of the gRPC server
         self.grpc_server_ip = grpc_server_ip
         # Port of the gRPC server
@@ -175,6 +179,8 @@ class EWEdgeDevice(object):
             token_file=self.token_file,
             keep_alive_interval=self.keep_alive_interval,
             stop_event=stop_event,
+            secure=self.secure,
+            certificate=self.client_certificate,
             debug=self.VERBOSE)
         # Run registration client
         registration_client.run()
@@ -203,8 +209,8 @@ class EWEdgeDevice(object):
             grpc_ip=self.grpc_server_ip,
             grpc_port=self.grpc_server_port,
             secure=self.secure,
-            key=self.key,
-            certificate=self.certificate,
+            key=self.server_key,
+            certificate=self.server_certificate,
             quagga_password=self.quagga_password,
             zebra_port=self.zebra_port,
             ospf6d_port=self.ospf6d_port,
@@ -237,12 +243,16 @@ def parseArguments():
                         action='store', default=DEFAULT_GRPC_SERVER_PORT,
                         help='Port of the southbound gRPC server')
     # Enable secure mode
-    parser.add_argument('-s', '--secure', action='store_true',
+    parser.add_argument('-s', '--secure', action='store_true', dest='secure',
                         default=DEFAULT_SECURE, help='Activate secure mode')
     # Server certificate
     parser.add_argument('--server-cert', dest='server_cert',
                         action='store', default=DEFAULT_CERTIFICATE,
                         help='Server certificate file')
+    # Client certificate
+    parser.add_argument('--client-cert', dest='client_cert',
+                        action='store', default=DEFAULT_CERTIFICATE,
+                        help='Client certificate file')
     # Server key
     parser.add_argument('--server-key', dest='server_key',
                         action='store', default=DEFAULT_KEY,
@@ -332,6 +342,8 @@ def parse_config_file(config_file):
         grpc_server_port = None
         secure = None
         server_key = None
+        server_cert = None
+        client_cert = None
         quagga_password = None
         zebra_port = None
         ospf6d_port = None
@@ -365,6 +377,8 @@ def parse_config_file(config_file):
     args.secure = config['DEFAULT'].get('secure', DEFAULT_SECURE)
     # Server certificate
     args.server_cert = config['DEFAULT'].get('server_cert', DEFAULT_CERTIFICATE)
+    # Client certificate
+    args.client_cert = config['DEFAULT'].get('client_cert', DEFAULT_CERTIFICATE)
     # Server key
     args.server_key = config['DEFAULT'].get('server_key', DEFAULT_KEY)
     # Password used to log in to ospf6d and zebra daemons
@@ -435,7 +449,9 @@ def _main():
     # pymerang server port
     pymerang_server_port = args.pymerang_server_port
     # Server certificate
-    certificate = args.server_cert
+    server_certificate = args.server_cert
+    # Client certificate
+    client_certificate = args.client_cert
     # Quagga password
     quagga_password = args.quagga_password
     # ospf6d port
@@ -443,7 +459,7 @@ def _main():
     # zebra port
     zebra_port = args.zebra_port
     # Server key
-    key = args.server_key
+    server_key = args.server_key
     # Pymerang server IP
     pymerang_server_ip = args.pymerang_server_ip
     # Pymerang server port
@@ -475,8 +491,9 @@ def _main():
     ew_edge_device = EWEdgeDevice(
         sb_interface=sb_interface,
         secure=secure,
-        key=key,
-        certificate=certificate,
+        server_key=server_key,
+        server_certificate=server_certificate,
+        client_certificate=client_certificate,
         grpc_server_ip=grpc_server_ip,
         grpc_server_port=grpc_server_port,
         quagga_password=quagga_password,
