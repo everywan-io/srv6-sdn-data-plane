@@ -154,8 +154,9 @@ class EWEdgeDevice(object):
             print('*** OSPF6D port: %s' % self.ospf6d_port)
             if self.secure:
                 print('*** Secure mode: enabled')
-                print('*** Key: %s' % self.key)
-                print('*** Certificate: %s' % self.certificate)
+                print('*** Server key: %s' % self.server_key)
+                print('*** Server certificate: %s' % self.server_certificate)
+                print('*** Client certificate: %s' % self.client_certificate)
             else:
                 print('*** Secure mode: disabled')
             print('*** Selected southbound interface: %s' % self.sb_interface)
