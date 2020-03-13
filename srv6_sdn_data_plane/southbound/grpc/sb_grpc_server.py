@@ -61,6 +61,8 @@ from srv6_sdn_proto import gre_interface_pb2
 #from .sb_grpc_utils import InvalidAddressFamilyError
 from .sb_grpc_utils import InvalidAddressFamilyError
 
+from srv6_sdn_openssl import ssl
+
 # Global variables definition
 
 # Quagga configuration params
@@ -149,12 +151,17 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
     '''gRPC request handler'''
 
     def __init__(self, quagga_password=DEFAULT_QUAGGA_PASSWORD,
-                 zebra_port=DEFAULT_ZEBRA_PORT, ospf6d_port=DEFAULT_OSPF6D_PORT,
-                 stop_event=None):
+                 zebra_port=DEFAULT_ZEBRA_PORT,
+                 ospf6d_port=DEFAULT_OSPF6D_PORT,
+                 start_event=None,
+                 stop_event=None,
+                 restart_event=None):
         self.quagga_password = quagga_password
         self.zebra_port = zebra_port
         self.ospf6d_port = ospf6d_port
+        self.start_event = start_event
         self.stop_event = stop_event
+        self.restart_event = restart_event
 
     def parse_netlink_error(self, e):
         if e.code == NETLINK_ERROR_FILE_EXISTS:
@@ -1050,60 +1057,80 @@ def start_server(grpc_ip=DEFAULT_GRPC_IP,
                  secure=DEFAULT_SECURE,
                  certificate=DEFAULT_CERTIFICATE,
                  key=DEFAULT_KEY,
-                 stop_event=None):
+                 start_event=None,
+                 stop_event=None,
+                 restart_event=None):
     # Configure gRPC server listener and ip route
     global grpc_server, ip_route, ipdb
-    # Setup gRPC server
-    if grpc_server is not None:
-        logging.error('gRPC Server is already up and running')
-    else:
-        # Create the server and add the handlers
-        grpc_server = grpc.server(futures.ThreadPoolExecutor())
-        (srv6_manager_pb2_grpc
-         .add_SRv6ManagerServicer_to_server(
-             SRv6Manager(quagga_password, zebra_port, ospf6d_port, stop_event),
-             grpc_server)
-        )
-        (network_events_listener_pb2_grpc
-         .add_NetworkEventsListenerServicer_to_server(NetworkEventsListener(),
-                                                      grpc_server))
-        # If secure we need to create a secure endpoint
-        if secure:
-            # Read key and certificate
-            with open(key, 'rb') as f:
-                key = f.read()
-            with open(certificate, 'rb') as f:
-                certificate = f.read()
-            # Create server ssl credentials
-            grpc_server_credentials = (grpc
-                                       .ssl_server_credentials(((key,
-                                                               certificate),)))
-            # Create a secure endpoint
-            grpc_server.add_secure_port('[%s]:%s' % (grpc_ip, grpc_port),
-                                        grpc_server_credentials)
+    while True:
+        # Setup gRPC server
+        if grpc_server is not None:
+            logging.error('gRPC Server is already up and running')
         else:
-            # Create an insecure endpoint
-            grpc_server.add_insecure_port('[%s]:%s' % (grpc_ip, grpc_port))
-    # Setup ip route
-    if ip_route is not None:
-        logging.error('IP Route is already setup')
-    else:
-        ip_route = IPRoute()
-    # Setup ipdb
-    if ipdb is not None:
-        logging.error('IPDB is already setup')
-    else:
-        ipdb = IPDB()
-    # Resolve the interfaces
-    for link in ip_route.get_links():
-        if link.get_attr('IFLA_IFNAME') != 'lo':
-            interfaces.append(link.get_attr('IFLA_IFNAME'))
-    for interface in interfaces:
-        idxs[interface] = ip_route.link_lookup(ifname=interface)[0]
-    # Start the loop for gRPC
-    logging.info('*** Listening gRPC')
-    grpc_server.start()
-    stop_event.wait()
+            # Create the server and add the handlers
+            grpc_server = grpc.server(futures.ThreadPoolExecutor())
+            (srv6_manager_pb2_grpc
+            .add_SRv6ManagerServicer_to_server(
+                SRv6Manager(
+                    quagga_password=quagga_password,
+                    zebra_port=zebra_port,
+                    ospf6d_port=ospf6d_port,
+                    start_event=start_event,
+                    stop_event=stop_event,
+                    restart_event=restart_event),
+                grpc_server)
+            )
+            (network_events_listener_pb2_grpc
+            .add_NetworkEventsListenerServicer_to_server(NetworkEventsListener(),
+                                                        grpc_server))
+            # Wait until the device has been registered and authenticated
+            if start_event is not None:
+                logging.info('*** gRPC server is waiting for device authentication')
+                start_event.wait()
+                logging.info('*** Device authentication completed')
+            logging.info('*** Starting gRPC server')
+            # If secure we need to create a secure endpoint
+            if secure:
+                # Read key and certificate
+                with open(key, 'rb') as f:
+                    key = f.read()
+                with open(certificate, 'rb') as f:
+                    certificate = f.read()
+                # Create server ssl credentials
+                grpc_server_credentials = (grpc
+                                        .ssl_server_credentials(((key,
+                                                                certificate),)))
+                # Create a secure endpoint
+                grpc_server.add_secure_port('[%s]:%s' % (grpc_ip, grpc_port),
+                                            grpc_server_credentials)
+            else:
+                # Create an insecure endpoint
+                grpc_server.add_insecure_port('[%s]:%s' % (grpc_ip, grpc_port))
+        # Setup ip route
+        if ip_route is not None:
+            logging.error('IP Route is already setup')
+        else:
+            ip_route = IPRoute()
+        # Setup ipdb
+        if ipdb is not None:
+            logging.error('IPDB is already setup')
+        else:
+            ipdb = IPDB()
+        # Resolve the interfaces
+        for link in ip_route.get_links():
+            if link.get_attr('IFLA_IFNAME') != 'lo':
+                interfaces.append(link.get_attr('IFLA_IFNAME'))
+        for interface in interfaces:
+            idxs[interface] = ip_route.link_lookup(ifname=interface)[0]
+        # Start the loop for gRPC
+        logging.info('*** Listening gRPC')
+        grpc_server.start()
+        stop_event.wait()
+        if not restart_event.is_set():
+            break
+        logging.info('*** Restarting gRPC server')
+        grpc_server.stop(10).wait()
+        grpc_server = None
     logging.info('*** Terminating gRPC server')
     grpc_server.stop(10).wait()
     logging.info('*** Server terminated')

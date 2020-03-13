@@ -167,7 +167,8 @@ class EWEdgeDevice(object):
             print()
 
     # Start registration client
-    def start_registration_client(self, stop_event=None):
+    def start_registration_client(self, start_event=None,
+                                  stop_event=None, restart_event=None):
         logging.info('*** Starting registration client')
         registration_client = PymerangDevice(
             server_ip=self.pymerang_server_ip,
@@ -179,7 +180,9 @@ class EWEdgeDevice(object):
             config_file=self.config_file,
             token_file=self.token_file,
             keep_alive_interval=self.keep_alive_interval,
+            start_event=start_event,
             stop_event=stop_event,
+            restart_event=restart_event,
             secure=self.secure,
             certificate=self.client_certificate,
             debug=self.VERBOSE)
@@ -191,12 +194,16 @@ class EWEdgeDevice(object):
     def run(self):
         if self.VERBOSE:
             print('*** Starting the EveryWAN Edge Device')
+        # Start event
+        start_event = threading.Event()
         # Stop event
         stop_event = threading.Event()
+        # Restart event
+        restart_event = threading.Event()
         # Start registration server
         thread = Thread(
             target=self.start_registration_client,
-            args=(stop_event,)
+            args=(start_event, stop_event, restart_event)
         )
         # thread.daemon = True
         thread.start()
@@ -215,7 +222,9 @@ class EWEdgeDevice(object):
             quagga_password=self.quagga_password,
             zebra_port=self.zebra_port,
             ospf6d_port=self.ospf6d_port,
-            stop_event=stop_event
+            start_event=start_event,
+            stop_event=stop_event,
+            restart_event=restart_event
         )
 
 
