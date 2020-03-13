@@ -89,6 +89,8 @@ class EWEdgeDevice(object):
                  zebra_port=DEFAULT_ZEBRA_PORT,
                  pymerang_server_ip=DEFAULT_PYMERANG_SERVER_IP,
                  pymerang_server_port=DEFAULT_PYMERANG_SERVER_PORT,
+                 ca_server_ip=DEFAULT_PYMERANG_SERVER_IP,
+                 ca_server_port=DEFAULT_PYMERANG_SERVER_PORT,
                  nat_discovery_server_ip=DEFAULT_NAT_DISCOVERY_SERVER_IP,
                  nat_discovery_server_port=DEFAULT_NAT_DISCOVERY_SERVER_PORT,
                  nat_discovery_client_ip=DEFAULT_NAT_DISCOVERY_CLIENT_IP,
@@ -131,6 +133,10 @@ class EWEdgeDevice(object):
         self.pymerang_server_ip = pymerang_server_ip
         # Port on which the gRPC pymerang server is listening
         self.pymerang_server_port = pymerang_server_port
+        # IP address of the CA gRPC server
+        self.ca_server_ip = ca_server_ip
+        # Port on which the CA gRPC server is listening
+        self.ca_server_port = ca_server_port
         # IP address of the NAT discovery server
         self.nat_discovery_server_ip = nat_discovery_server_ip
         # Port of the NAT discovery server
@@ -173,6 +179,8 @@ class EWEdgeDevice(object):
         registration_client = PymerangDevice(
             server_ip=self.pymerang_server_ip,
             server_port=self.pymerang_server_port,
+            ca_server_ip=self.ca_server_ip,
+            ca_server_port=self.ca_server_port,
             nat_discovery_server_ip=self.nat_discovery_server_ip,
             nat_discovery_server_port=self.nat_discovery_server_port,
             nat_discovery_client_ip=self.nat_discovery_client_ip,
@@ -289,6 +297,16 @@ def parseArguments():
         '-p', '--pymerang-server-port', dest='pymerang_server_port',
         default=DEFAULT_PYMERANG_SERVER_PORT, help='Pymerang server port'
     )
+    # IP address of the CA gRPC server
+    parser.add_argument(
+        '--ca-server-ip', dest='ca_server_ip',
+        default=DEFAULT_PYMERANG_SERVER_IP, help='CA server IP address'
+    )
+    # Port of the CA gRPC server
+    parser.add_argument(
+        '--ca-server-port', dest='ca_server_port',
+        default=DEFAULT_PYMERANG_SERVER_PORT, help='CA server port'
+    )
     # IP address of the NAT discovery server
     parser.add_argument(
         '-n', '--nat-discovery-server-ip', dest='nat_discovery_server_ip',
@@ -404,6 +422,12 @@ def parse_config_file(config_file):
     # Port of the gRPC server
     args.pymerang_server_port = config['DEFAULT'].get(
         'pymerang_server_port', DEFAULT_PYMERANG_SERVER_PORT)
+    # IP address of the CA gRPC server
+    args.ca_server_ip = config['DEFAULT'].get(
+        'ca_server_ip', DEFAULT_PYMERANG_SERVER_IP)
+    # Port of the CA gRPC server
+    args.ca_server_port = config['DEFAULT'].get(
+        'ca_server_port', DEFAULT_PYMERANG_SERVER_PORT)
     # IP address of the NAT discovery server
     args.nat_discovery_server_ip = config['DEFAULT'].get(
         'nat_discovery_server_ip', DEFAULT_NAT_DISCOVERY_SERVER_IP)
@@ -474,6 +498,10 @@ def _main():
     pymerang_server_ip = args.pymerang_server_ip
     # Pymerang server port
     pymerang_server_port = args.pymerang_server_port
+    # CA server IP
+    ca_server_ip = args.ca_server_ip
+    # CA server port
+    ca_server_port = args.ca_server_port
     # NAT discovery server IP
     nat_discovery_server_ip = args.nat_discovery_server_ip
     # NAT discovery server port
@@ -511,6 +539,8 @@ def _main():
         zebra_port=zebra_port,
         pymerang_server_ip=pymerang_server_ip,
         pymerang_server_port=pymerang_server_port,
+        ca_server_ip=ca_server_ip,
+        ca_server_port=ca_server_port,
         nat_discovery_server_ip=nat_discovery_server_ip,
         nat_discovery_server_port=nat_discovery_server_port,
         nat_discovery_client_ip=nat_discovery_client_ip,
