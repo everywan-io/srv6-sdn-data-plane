@@ -881,6 +881,78 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
         # and create the response
         return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
 
+    def HandleBridgeDeviceRequest(self, op, request, context):
+        logging.debug('config received:\n%s', request)
+        # Let's process the request
+        try:
+            if op == 'add' or op == 'del':
+                for device in request.devices:
+                    ip_route.link(op, ifname=device.name,
+                                  kind='bridge')
+                    if op == 'add':
+                        # Enable the new bridge
+                        br_index = ip_route.link_lookup(ifname=device.name)[0]
+                        ip_route.link('set', index=br_index, state='up')
+                # and create the response
+                if op == 'add':
+                    return self.HandleBridgeDeviceRequest('change', request, context)
+                else:
+                    logging.debug('Send response: OK')
+                    return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+            elif op == 'change':
+                for device in request.devices:
+                    if device.op == 'add_interfaces':
+                        # Get the bridge index
+                        br_index = ip_route.link_lookup(ifname=device.name)[0]
+                        # Add the remaining links to the bridge
+                        for interface in device.interfaces:
+                            ifindex = ip_route.link_lookup(ifname=interface)[0]
+                            ip_route.link('set', index=ifindex, master=br_index)
+                        return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+                    elif device.op == 'del_interfaces':
+                        # Get the bride index
+                        br_index = ip_route.link_lookup(ifname=device.name)[0]
+                        # For each link in the bridge
+                        interfaces_in_bridge = set()
+                        for link in ip_route.get_links():
+                            if link.get_attr('IFLA_MASTER') == br_index:
+                                interfaces_in_bridge.add(link.get_attr('IFLA_IFNAME'))
+                        # Add the remaining links to the bridge
+                        for interface in device.interfaces:
+                            if interface not in interfaces_in_bridge:
+                                logging.warning('Interface does not belong to the bridge')
+                                return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_NO_SUCH_DEVICE)
+                            ifindex = ip_route.link_lookup(ifname=interface)[0]
+                            ip_route.link('set', index=ifindex, master=0)
+                        return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+                    else:
+                        # Get the interfaces to be added to the bridge
+                        interfaces = []
+                        for interface in device.interfaces:
+                            interfaces.append(interface)
+                        # Get the bridge index
+                        br_index = ip_route.link_lookup(ifname=device.name)[0]
+                        # For each link in the bridge
+                        for link in ip_route.get_links():
+                            if link.get_attr('IFLA_MASTER') == br_index:
+                                if link.get_attr('IFLA_IFNAME') in interfaces:
+                                    # The link belongs to the bridge
+                                    interfaces.remove(link.get_attr('IFLA_IFNAME'))
+                                else:
+                                    # The link has to be removed from the bridge
+                                    ifindex = link.get('index')
+                                    ip_route.link('set', index=ifindex, master=0)
+                        # Add the remaining links to the bridge
+                        for interface in interfaces:
+                            ifindex = ip_route.link_lookup(ifname=interface)[0]
+                            ip_route.link('set', index=ifindex, master=br_index)
+                        return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+            else:
+                # Operation unknown: this is a bug
+                logging.error('Unrecognized operation: %s' % op)
+        except NetlinkError as e:
+            return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
+
     def Execute(self, op, request, context):
         entity_type = request.entity_type
         # Handle operation
@@ -919,7 +991,10 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
             return self.HandleIPVxLANRequest(op, request, context)
         elif entity_type == srv6_manager_pb2.IPfdbentries:
             request = request.fdbentries_request
-            return self.HandleIPfdbentriesRequest(op, request, context)    
+            return self.HandleIPfdbentriesRequest(op, request, context)   
+        elif entity_type == srv6_manager_pb2.BridgeDevice:
+            request = request.bridge_device_request
+            return self.HandleBridgeDeviceRequest(op, request, context) 
         else:
             return (srv6_manager_pb2
                     .SRv6ManagerReply(status=status_codes_pb2.STATUS_INVALID_GRPC_REQUEST))
