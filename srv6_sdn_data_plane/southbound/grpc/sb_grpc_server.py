@@ -267,6 +267,7 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                                               'action': 'End.T',
                                               'table': table})
                     elif action == 'End.DX2':
+                        interface = ip_route.link_lookup(ifname=interface)[0]
                         ip_route.route(op, family=AF_INET6, dst=segment,
                                        oif=idxs[device],
                                        table=localsid_table,
@@ -1137,6 +1138,27 @@ def start_server(grpc_ip=DEFAULT_GRPC_IP,
                  restart_event=None):
     # Configure gRPC server listener and ip route
     global grpc_server, ip_route, ipdb
+    # Setup ip route
+    if ip_route is not None:
+        logging.error('IP Route is already setup')
+    else:
+        ip_route = IPRoute()
+    # Setup ipdb
+    if ipdb is not None:
+        logging.error('IPDB is already setup')
+    else:
+        ipdb = IPDB()
+    # Resolve the interfaces
+    for link in ip_route.get_links():
+        if link.get_attr('IFLA_IFNAME') != 'lo':
+            interfaces.append(link.get_attr('IFLA_IFNAME'))
+    for interface in interfaces:
+        idxs[interface] = ip_route.link_lookup(ifname=interface)[0]
+    # Wait until the device has been registered and authenticated
+    if start_event is not None:
+        logging.info('*** gRPC server is waiting for device authentication')
+        start_event.wait()
+        logging.info('*** Device authentication completed')
     while True:
         # Setup gRPC server
         if grpc_server is not None:
@@ -1158,51 +1180,31 @@ def start_server(grpc_ip=DEFAULT_GRPC_IP,
             (network_events_listener_pb2_grpc
             .add_NetworkEventsListenerServicer_to_server(NetworkEventsListener(),
                                                         grpc_server))
-            # Wait until the device has been registered and authenticated
-            if start_event is not None:
-                logging.info('*** gRPC server is waiting for device authentication')
-                start_event.wait()
-                logging.info('*** Device authentication completed')
             logging.info('*** Starting gRPC server')
             # If secure we need to create a secure endpoint
             if secure:
                 # Read key and certificate
                 with open(key, 'rb') as f:
-                    key = f.read()
+                    k = f.read()
                 with open(certificate, 'rb') as f:
-                    certificate = f.read()
+                    c = f.read()
                 # Create server ssl credentials
                 grpc_server_credentials = (grpc
-                                        .ssl_server_credentials(((key,
-                                                                certificate),)))
+                                        .ssl_server_credentials(((k, c),)))
                 # Create a secure endpoint
                 grpc_server.add_secure_port('[%s]:%s' % (grpc_ip, grpc_port),
                                             grpc_server_credentials)
             else:
                 # Create an insecure endpoint
                 grpc_server.add_insecure_port('[%s]:%s' % (grpc_ip, grpc_port))
-        # Setup ip route
-        if ip_route is not None:
-            logging.error('IP Route is already setup')
-        else:
-            ip_route = IPRoute()
-        # Setup ipdb
-        if ipdb is not None:
-            logging.error('IPDB is already setup')
-        else:
-            ipdb = IPDB()
-        # Resolve the interfaces
-        for link in ip_route.get_links():
-            if link.get_attr('IFLA_IFNAME') != 'lo':
-                interfaces.append(link.get_attr('IFLA_IFNAME'))
-        for interface in interfaces:
-            idxs[interface] = ip_route.link_lookup(ifname=interface)[0]
         # Start the loop for gRPC
         logging.info('*** Listening gRPC')
         grpc_server.start()
         stop_event.wait()
         if not restart_event.is_set():
             break
+        restart_event.clear()
+        stop_event.clear()
         logging.info('*** Restarting gRPC server')
         grpc_server.stop(10).wait()
         grpc_server = None
