@@ -27,6 +27,15 @@ from pyroute2.netlink.exceptions import NetlinkError
 if sys.version_info >= (3, 0):
     from pyroute2.netlink.nlsocket import Stats
 
+# STAMP Support
+ENABLE_STAMP_SUPPORT = True
+
+# Import modules required by STAMP
+if ENABLE_STAMP_SUPPORT:
+    from srv6_delay_measurement import sender as stamp_sender_module
+    from srv6_delay_measurement import reflector as stamp_reflector_module
+
+
 ################## Setup these variables ##################
 
 # Path of the proto files
@@ -1059,6 +1068,10 @@ def start_server(grpc_ip=DEFAULT_GRPC_IP,
     else:
         # Create the server and add the handlers
         grpc_server = grpc.server(futures.ThreadPoolExecutor())
+        # Add the STAMP handlers
+        if ENABLE_STAMP_SUPPORT:
+            stamp_sender_module.run_grpc_server(server=grpc_server)
+            stamp_reflector_module.run_grpc_server(server=grpc_server)
         (srv6_manager_pb2_grpc
          .add_SRv6ManagerServicer_to_server(
              SRv6Manager(quagga_password, zebra_port, ospf6d_port, stop_event),
