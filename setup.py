@@ -30,6 +30,7 @@ setup(
         'grpcio>=1.19.0',
         'grpcio-tools>=1.19.0',
         'ipaddress>=1.0.22',
+        'networkx==1.11',
         'protobuf>=3.7.1',
         'pyroute2>=0.5.5',
         'six>=1.12.0',
