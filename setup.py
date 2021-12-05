@@ -33,6 +33,7 @@ setup(
         'protobuf>=3.7.1',
         'pyroute2>=0.5.5',
         'six>=1.12.0',
-        'pqueue>=0.1.7'
+        'pqueue>=0.1.7',
+        'filelock>=3.4.0'
     ]
 )
