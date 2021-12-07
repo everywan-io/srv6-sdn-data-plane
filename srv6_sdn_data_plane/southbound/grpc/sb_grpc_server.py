@@ -123,6 +123,8 @@ ROUTE_TYPES = {
     'nat': RTM_TYPES.RTN_NAT
 }
 
+# Whether to use Zebra or not for address configuration
+USE_ZEBRA = False
 
 # Server reference
 grpc_server = None
@@ -451,6 +453,61 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
             # and create the response
             logging.debug('Send response: OK')
             return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+        except NetlinkError as e:
+            return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
+
+    def HandleIPAddrPyroute2Request(self, op, request, context):
+        logging.debug('config received:\n%s', request)
+        # Let's process the request
+        try:
+            if op == 'add' or op == 'del':
+                # Interface configuration
+                for addr in request.addrs:
+                    # Extract the interface from the request
+                    device = str(addr.device)
+                    # Extract address family
+                    family = addr.family
+                    if family == -1:
+                        if op == 'del':
+                            family = AF_UNSPEC
+                        else:
+                            family = AF_INET
+                    # Get IP address
+                    ip = str(addr.ip_addr)
+                    # Get network prefix
+                    prefix = str(addr.net) if addr.net != '' else None
+                    # Interface configuration
+                    if family in [AF_INET, AF_INET6]:
+                        # Add or Remove IPv6 address
+                        ip_route.addr(
+                            op, index=ip_route.link_lookup(ifname=device)[0],
+                            address=ip.split('/')[0],
+                            mask=int(ip.split('/')[1]), family=family
+                        )
+                    elif family == AF_UNSPEC:
+                        if op == 'del':
+                            # Remove IPv4/IPv6 address
+                            ip_route.addr(
+                                op, index=ip_route.link_lookup(ifname=device)[0],
+                                address=ip.split('/')[0],
+                                mask=int(ip.split('/')[1])
+                            )
+                        else:
+                            raise InvalidAddressFamilyError
+                    else:
+                        raise InvalidAddressFamilyError
+                    logging.debug('Send response: OK')
+                    return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+            else:
+                # Operation unknown: this is a bug
+                logging.error('Unrecognized operation: %s' % op)
+            # and create the response
+            logging.debug('Send response: OK')
+            return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+        except InvalidAddressFamilyError:
+            logging.debug('Send response: Invalid address family')
+            return (srv6_manager_pb2
+                    .SRv6ManagerReply(status=status_codes_pb2.STATUS_INVALID_ADDRESS))
         except NetlinkError as e:
             return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
 
@@ -897,7 +954,10 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                                                                   context))
         elif entity_type == srv6_manager_pb2.IPAddr:
             request = request.ipaddr_request
-            return self.HandleIPAddrRequest(op, request, context)
+            if USE_ZEBRA:
+                return self.HandleIPAddrRequest(op, request, context)
+            else:
+                return self.HandleIPAddrPyroute2Request(op, request, context)
         elif entity_type == srv6_manager_pb2.IPRule:
             request = request.iprule_request
             return self.HandleIPRuleRequest(op, request, context)
