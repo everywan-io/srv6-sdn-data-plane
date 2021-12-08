@@ -94,6 +94,7 @@ class EWEdgeDevice(object):
                  config_file=DEFAULT_CONFIG_FILE,
                  token_file=DEFAULT_TOKEN_FILE,
                  keep_alive_interval=DEFAULT_KEEP_ALIVE_INTERVAL,
+                 sid_prefix=None,
                  verbose=DEFAULT_VERBOSE):
         # Verbose mode
         self.VERBOSE = verbose
@@ -141,6 +142,8 @@ class EWEdgeDevice(object):
         self.token_file = token_file
         # Keep alive interval
         self.keep_alive_interval = keep_alive_interval
+        # Prefix to be used for SRv6 tunnels
+        self.sid_prefix = sid_prefix
         # Print configuration
         if self.VERBOSE:
             print()
@@ -174,6 +177,7 @@ class EWEdgeDevice(object):
             config_file=self.config_file,
             token_file=self.token_file,
             keep_alive_interval=self.keep_alive_interval,
+            sid_prefix=self.sid_prefix,
             stop_event=stop_event,
             debug=self.VERBOSE)
         # Run registration client
@@ -311,6 +315,10 @@ def parseArguments():
         default=DEFAULT_TOKEN_FILE,
         help='File containing the token used for the authentication'
     )
+    # Prefix to be used for SRv6 tunnels
+    parser.add_argument('--sid-prefix', dest='sid_prefix',
+                        action='store', default=None,
+                        help='Prefix to be used for SRv6 tunnels')
     # Config file
     parser.add_argument('-c', '--config-file', dest='config_file',
                         action='store', default=None,
@@ -344,6 +352,7 @@ def parse_config_file(config_file):
         device_config_file = None
         keep_alive_interval = None
         token_file = None
+        sid_prefix = None
 
     args = Args()
     # Get parser
@@ -398,6 +407,8 @@ def parse_config_file(config_file):
     # Interval between two consecutive keep alive messages
     args.keep_alive_interval = int(config['DEFAULT'].get(
         'keep_alive_interval', DEFAULT_KEEP_ALIVE_INTERVAL))
+    # Prefix to be used for SRv6 tunnels
+    args.sid_prefix = config['DEFAULT'].get('sid_prefix', None)
     # Interval between two consecutive keep alive messages
     args.token_file = config['DEFAULT'].get('token_file', DEFAULT_TOKEN_FILE)
     # Done, return
@@ -462,6 +473,8 @@ def _main():
     keep_alive_interval = args.keep_alive_interval
     # File containing the token used for the authentication
     token_file = args.token_file
+    # Prefix to be used for SRv6 tunnels
+    sid_prefix = args.sid_prefix
     #
     # Check debug level
     SERVER_DEBUG = logger.getEffectiveLevel() == logging.DEBUG
@@ -491,6 +504,7 @@ def _main():
         config_file=config_file,
         token_file=token_file,
         keep_alive_interval=keep_alive_interval,
+        sid_prefix=sid_prefix,
         verbose=verbose
     )
     # Start the edge device
