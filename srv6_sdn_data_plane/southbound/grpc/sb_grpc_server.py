@@ -302,14 +302,14 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                                        table=localsid_table,
                                        encap={'type': 'seg6local',
                                               'action': 'End.DT4',
-                                              'table': table})
+                                              'vrf_table': table})
                     elif action == 'End.DT46':
                         ip_route.route(op, family=AF_INET6, dst=segment,
                                        oif=idxs[device],
                                        table=localsid_table,
                                        encap={'type': 'seg6local',
                                               'action': 'End.DT46',
-                                              'table': table})
+                                              'vrf_table': table})
                     elif action == 'End.B6':
                         # Rebuild segments
                         segments = []
