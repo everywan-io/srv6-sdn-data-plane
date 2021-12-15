@@ -95,6 +95,7 @@ class EWEdgeDevice(object):
                  token_file=DEFAULT_TOKEN_FILE,
                  keep_alive_interval=DEFAULT_KEEP_ALIVE_INTERVAL,
                  sid_prefix=None,
+                 public_prefix_length=None,
                  verbose=DEFAULT_VERBOSE):
         # Verbose mode
         self.VERBOSE = verbose
@@ -144,6 +145,8 @@ class EWEdgeDevice(object):
         self.keep_alive_interval = keep_alive_interval
         # Prefix to be used for SRv6 tunnels
         self.sid_prefix = sid_prefix
+        # Public prefix length, used to generate the SRv6 SID list
+        self.public_prefix_length = public_prefix_length
         # Print configuration
         if self.VERBOSE:
             print()
@@ -178,6 +181,7 @@ class EWEdgeDevice(object):
             token_file=self.token_file,
             keep_alive_interval=self.keep_alive_interval,
             sid_prefix=self.sid_prefix,
+            public_prefix_length=self.public_prefix_length,
             stop_event=stop_event,
             debug=self.VERBOSE)
         # Run registration client
@@ -319,6 +323,11 @@ def parseArguments():
     parser.add_argument('--sid-prefix', dest='sid_prefix',
                         action='store', default=None,
                         help='Prefix to be used for SRv6 tunnels')
+    # Public prefix length, used to genearte the SRv6 SID list
+    parser.add_argument('--public-prefix-length', dest='public_prefix_length',
+                        action='store', default=None,
+                        help='Public prefix length used to generate the SRv6 '
+                        'SID list')
     # Config file
     parser.add_argument('-c', '--config-file', dest='config_file',
                         action='store', default=None,
@@ -353,6 +362,7 @@ def parse_config_file(config_file):
         keep_alive_interval = None
         token_file = None
         sid_prefix = None
+        public_prefix_length = None
 
     args = Args()
     # Get parser
@@ -409,6 +419,9 @@ def parse_config_file(config_file):
         'keep_alive_interval', DEFAULT_KEEP_ALIVE_INTERVAL))
     # Prefix to be used for SRv6 tunnels
     args.sid_prefix = config['DEFAULT'].get('sid_prefix', None)
+    # Public prefix length used to generate the SRv6 SID list
+    args.public_prefix_length = \
+        config['DEFAULT'].get('public_prefix_length', None)
     # Interval between two consecutive keep alive messages
     args.token_file = config['DEFAULT'].get('token_file', DEFAULT_TOKEN_FILE)
     # Done, return
@@ -475,6 +488,8 @@ def _main():
     token_file = args.token_file
     # Prefix to be used for SRv6 tunnels
     sid_prefix = args.sid_prefix
+    # Public prefix length used to generate the SRv6 SID list
+    public_prefix_length = args.public_prefix_length
     #
     # Check debug level
     SERVER_DEBUG = logger.getEffectiveLevel() == logging.DEBUG
@@ -505,6 +520,7 @@ def _main():
         token_file=token_file,
         keep_alive_interval=keep_alive_interval,
         sid_prefix=sid_prefix,
+        public_prefix_length=public_prefix_length,
         verbose=verbose
     )
     # Start the edge device
