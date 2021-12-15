@@ -422,6 +422,8 @@ def parse_config_file(config_file):
     # Public prefix length used to generate the SRv6 SID list
     args.public_prefix_length = \
         config['DEFAULT'].get('public_prefix_length', None)
+    if args.public_prefix_length is not None:
+        args.public_prefix_length = int(args.public_prefix_length)
     # Interval between two consecutive keep alive messages
     args.token_file = config['DEFAULT'].get('token_file', DEFAULT_TOKEN_FILE)
     # Done, return
