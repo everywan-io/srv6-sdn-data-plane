@@ -96,6 +96,7 @@ class EWEdgeDevice(object):
                  keep_alive_interval=DEFAULT_KEEP_ALIVE_INTERVAL,
                  sid_prefix=None,
                  public_prefix_length=None,
+                 enable_proxy_ndp=False,
                  verbose=DEFAULT_VERBOSE):
         # Verbose mode
         self.VERBOSE = verbose
@@ -147,6 +148,8 @@ class EWEdgeDevice(object):
         self.sid_prefix = sid_prefix
         # Public prefix length, used to generate the SRv6 SID list
         self.public_prefix_length = public_prefix_length
+        # Define whether to enable or not proxy NDP for SIDs advertisement
+        self.enable_proxy_ndp = enable_proxy_ndp
         # Print configuration
         if self.VERBOSE:
             print()
@@ -182,10 +185,16 @@ class EWEdgeDevice(object):
             keep_alive_interval=self.keep_alive_interval,
             sid_prefix=self.sid_prefix,
             public_prefix_length=self.public_prefix_length,
+            enable_proxy_ndp = self.enable_proxy_ndp,
             stop_event=stop_event,
             debug=self.VERBOSE)
         # Run registration client
         registration_client.run()
+
+    def init_ew_edge_device(self):
+        # Enable Proxy NDP
+        if self.enable_proxy_ndp:
+            os.system('sysctl -w net.ipv6.conf.all.proxy_ndp=1')
 
     # Run the EveryWAN Edge Device
 
@@ -194,6 +203,8 @@ class EWEdgeDevice(object):
             print('*** Starting the EveryWAN Edge Device')
         # Stop event
         stop_event = threading.Event()
+        # Initialize the EveryEdge device
+        self.init_ew_edge_device()
         # Start registration server
         thread = Thread(
             target=self.start_registration_client,
@@ -325,9 +336,14 @@ def parseArguments():
                         help='Prefix to be used for SRv6 tunnels')
     # Public prefix length, used to genearte the SRv6 SID list
     parser.add_argument('--public-prefix-length', dest='public_prefix_length',
-                        action='store', default=None,
+                        action='store', default=None, type=int,
                         help='Public prefix length used to generate the SRv6 '
                         'SID list')
+    # Define whether to enable or not proxy NDP for SIDs advertisement
+    parser.add_argument('--disable-proxy-ndp', dest='enable_proxy_ndp',
+                        action='store_false', default=True,
+                        help='Define whether to enable or not proxy NDP for '
+                        'SIDs advertisement')
     # Config file
     parser.add_argument('-c', '--config-file', dest='config_file',
                         action='store', default=None,
@@ -363,6 +379,7 @@ def parse_config_file(config_file):
         token_file = None
         sid_prefix = None
         public_prefix_length = None
+        enable_proxy_ndp = None
 
     args = Args()
     # Get parser
@@ -424,6 +441,8 @@ def parse_config_file(config_file):
         config['DEFAULT'].get('public_prefix_length', None)
     if args.public_prefix_length is not None:
         args.public_prefix_length = int(args.public_prefix_length)
+    # Define whether to enable or not proxy NDP for SIDs advertisement
+    args.enable_proxy_ndp = config['DEFAULT'].get('enable_proxy_ndp', True)
     # Interval between two consecutive keep alive messages
     args.token_file = config['DEFAULT'].get('token_file', DEFAULT_TOKEN_FILE)
     # Done, return
@@ -492,6 +511,8 @@ def _main():
     sid_prefix = args.sid_prefix
     # Public prefix length used to generate the SRv6 SID list
     public_prefix_length = args.public_prefix_length
+    # Define whether to enable or not proxy NDP for SIDs advertisement
+    enable_proxy_ndp = args.enable_proxy_ndp
     #
     # Check debug level
     SERVER_DEBUG = logger.getEffectiveLevel() == logging.DEBUG
@@ -523,6 +544,7 @@ def _main():
         keep_alive_interval=keep_alive_interval,
         sid_prefix=sid_prefix,
         public_prefix_length=public_prefix_length,
+        enable_proxy_ndp=enable_proxy_ndp,
         verbose=verbose
     )
     # Start the edge device
