@@ -23,6 +23,7 @@ from socket import AF_INET6
 from socket import AF_UNSPEC
 from queue import Queue
 from pyroute2.netlink.exceptions import NetlinkError
+from pyroute2.netlink.rtnl import ndmsg
 
 if sys.version_info >= (3, 0):
     from pyroute2.netlink.nlsocket import Stats
@@ -823,11 +824,17 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                     # Extract params from the request
                     family = neigh.family
                     addr = neigh.addr
-                    lladdr = neigh.lladdr
+                    lladdr = None
+                    if neigh.lladdr:
+                        lladdr = neigh.lladdr
                     device = neigh.device
+                    flags = 0
+                    if neigh.proxy:
+                        flags |= ndmsg.NTF_PROXY
                     # Create or delete the neigh
                     device = ip_route.link_lookup(ifname=device)[0]
-                    ip_route.neigh(op, family=family, dst=addr, proxy=lladdr, ifindex=device)
+                    ip_route.neigh(op, family=family, dst=addr, lladdr=lladdr, ifindex=device,
+                                   flags=flags, state=ndmsg.states['permanent'])
             else:
                 # Operation unknown: this is a bug
                 logging.error('Unrecognized operation: %s' % op)
