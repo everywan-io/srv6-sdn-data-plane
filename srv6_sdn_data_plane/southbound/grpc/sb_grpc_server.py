@@ -480,11 +480,15 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                     # Interface configuration
                     if family in [AF_INET, AF_INET6]:
                         # Add or Remove IPv6 address
-                        ip_route.addr(
-                            op, index=ip_route.link_lookup(ifname=device)[0],
-                            address=ip.split('/')[0],
-                            mask=int(ip.split('/')[1]), family=family
-                        )
+                        try:
+                            ip_route.addr(
+                                op, index=ip_route.link_lookup(ifname=device)[0],
+                                address=ip.split('/')[0],
+                                mask=int(ip.split('/')[1]), family=family
+                            )
+                        except NetlinkError:
+                            if not request.ignore_errors:
+                                raise NetlinkError
                     elif family == AF_UNSPEC:
                         if op == 'del':
                             # Remove IPv4/IPv6 address
