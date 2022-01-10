@@ -69,7 +69,7 @@ from srv6_sdn_proto import network_events_listener_pb2
 from srv6_sdn_proto import network_events_listener_pb2_grpc
 from srv6_sdn_proto import gre_interface_pb2
 #from .sb_grpc_utils import InvalidAddressFamilyError
-from .sb_grpc_utils import InvalidAddressFamilyError
+from .sb_grpc_utils import InvalidAddressFamilyError, getAddressFamily
 
 # Global variables definition
 
@@ -898,16 +898,33 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
             vxlan_link = vxlan.vxlan_link
             vxlan_id = vxlan.vxlan_id
             vxlan_port = vxlan.vxlan_port
+            vxlan_group = None
+            if vxlan_group != '':
+                vxlan_group = vxlan.vxlan_group
             # Let's push the vxlan command 
             if op == 'add':
                 # Create VTEP
-                ip_route.link(op,
-                            ifname=ifname,
-                            kind="vxlan",
-                            vxlan_link=ip_route.link_lookup(ifname=vxlan_link)[0],
-                            vxlan_id=vxlan_id,
-                            vxlan_port=vxlan_port,
-                            vxlan_port_range={'low': vxlan_port, 'high': vxlan_port+1})
+                if getAddressFamily(vxlan_group) == AF_INET:
+                    ip_route.link(op,
+                                ifname=ifname,
+                                kind="vxlan",
+                                vxlan_link=ip_route.link_lookup(ifname=vxlan_link)[0],
+                                vxlan_id=vxlan_id,
+                                vxlan_port=vxlan_port,
+                                vxlan_port_range={'low': vxlan_port, 'high': vxlan_port+1},
+                                vxlan_group=vxlan_group)
+                elif getAddressFamily(vxlan_group) == AF_INET6:
+                    ip_route.link(op,
+                                ifname=ifname,
+                                kind="vxlan",
+                                vxlan_link=ip_route.link_lookup(ifname=vxlan_link)[0],
+                                vxlan_id=vxlan_id,
+                                vxlan_port=vxlan_port,
+                                vxlan_port_range={'low': vxlan_port, 'high': vxlan_port+1},
+                                vxlan_group6=vxlan_group)
+                else:
+                    return (srv6_manager_pb2
+                            .SRv6ManagerReply(status=status_codes_pb2.STATUS_INVALID_ADDRESS))
                 # Set UP VTEP             
                 ip_route.link('set', 
                               index=ip_route.link_lookup(ifname=ifname)[0], 

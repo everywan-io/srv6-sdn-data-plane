@@ -43,7 +43,7 @@ def isValidIPv6Address(ip):
     if ip is None:
         return False
     try:
-        IPv6Interface(unicode(ip))
+        IPv6Interface(ip)
         return True
     except AddressValueError:
         return False
@@ -55,7 +55,7 @@ def isValidIPv4Address(ip):
     if ip is None:
         return False
     try:
-        IPv4Interface(unicode(ip))
+        IPv4Interface(ip)
         return True
     except AddressValueError:
         return False
