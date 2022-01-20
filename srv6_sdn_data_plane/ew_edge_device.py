@@ -97,6 +97,8 @@ class EWEdgeDevice(object):
                  sid_prefix=None,
                  public_prefix_length=None,
                  enable_proxy_ndp=False,
+                 force_ip6tnl=False,
+                 force_srh=False,
                  verbose=DEFAULT_VERBOSE):
         # Verbose mode
         self.VERBOSE = verbose
@@ -150,6 +152,16 @@ class EWEdgeDevice(object):
         self.public_prefix_length = public_prefix_length
         # Define whether to enable or not proxy NDP for SIDs advertisement
         self.enable_proxy_ndp = enable_proxy_ndp
+        # For SRv6 tunnels, define whether to force the device to use IP(4|6)
+        # over IPv6 encapsulation; if this parameter is False, the device will
+        # use IP(4|6) over IPv6 encapsulation or IPv6+SRH encapsulation
+        # depending on the situation
+        self.force_ip6tnl = force_ip6tnl
+        # Define whether to force the device to use IPv6+SRH encapsulation
+        # instead of IP(4|6) over IPv6 encapsulation; if this parameter is
+        # False, the device will use IP(4|6) over IPv6 encapsulation or
+        # IPv6+SRH encapsulation depending on the situation
+        self.force_srh = force_srh
         # Print configuration
         if self.VERBOSE:
             print()
@@ -186,6 +198,8 @@ class EWEdgeDevice(object):
             sid_prefix=self.sid_prefix,
             public_prefix_length=self.public_prefix_length,
             enable_proxy_ndp = self.enable_proxy_ndp,
+            force_ip6tnl = self.force_ip6tnl,
+            force_srh = self.force_srh,
             stop_event=stop_event,
             debug=self.VERBOSE)
         # Run registration client
@@ -344,6 +358,14 @@ def parseArguments():
                         action='store_false', default=True,
                         help='Define whether to enable or not proxy NDP for '
                         'SIDs advertisement')
+    # Define whether to force ip6tnl or not
+    parser.add_argument('--force-ip6tnl', dest='force_ip6tnl',
+                        action='store_true', default=False,
+                        help='Define whether to force ip6tnl or not')
+    # Define whether to force SRH or not
+    parser.add_argument('--force-srh', dest='force_srh',
+                        action='store_true', default=False,
+                        help='Define whether to force SRH or not')
     # Config file
     parser.add_argument('-c', '--config-file', dest='config_file',
                         action='store', default=None,
@@ -380,6 +402,8 @@ def parse_config_file(config_file):
         sid_prefix = None
         public_prefix_length = None
         enable_proxy_ndp = None
+        force_ip6tnl = None
+        force_srh = None
 
     args = Args()
     # Get parser
@@ -443,6 +467,10 @@ def parse_config_file(config_file):
         args.public_prefix_length = int(args.public_prefix_length)
     # Define whether to enable or not proxy NDP for SIDs advertisement
     args.enable_proxy_ndp = config['DEFAULT'].get('enable_proxy_ndp', True)
+    # Define whether to force the device to use ip6tnl or not
+    args.force_ip6tnl = config['DEFAULT'].get('force_ip6tnl', False)
+    # Define whether to force the device to use SRH or not
+    args.force_srh = config['DEFAULT'].get('force_srh', False)
     # Interval between two consecutive keep alive messages
     args.token_file = config['DEFAULT'].get('token_file', DEFAULT_TOKEN_FILE)
     # Done, return
@@ -513,6 +541,10 @@ def _main():
     public_prefix_length = args.public_prefix_length
     # Define whether to enable or not proxy NDP for SIDs advertisement
     enable_proxy_ndp = args.enable_proxy_ndp
+    # Define whether to force the device to use ip6tnl or not
+    force_ip6tnl = args.force_ip6tnl
+    # Define whether to force the device to use SRH or not
+    force_srh = args.force_srh
     #
     # Check debug level
     SERVER_DEBUG = logger.getEffectiveLevel() == logging.DEBUG
@@ -545,6 +577,8 @@ def _main():
         sid_prefix=sid_prefix,
         public_prefix_length=public_prefix_length,
         enable_proxy_ndp=enable_proxy_ndp,
+        force_ip6tnl=force_ip6tnl,
+        force_srh=force_srh,
         verbose=verbose
     )
     # Start the edge device
