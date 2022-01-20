@@ -554,6 +554,11 @@ def _main():
         logging.error('Error: %s interface not yet supported or invalid\n'
                       'Supported southbound interfaces: %s' % (sb_interface, SUPPORTED_SB_INTERFACES))
         exit(-1)
+    # Check SRv6 tunnel parameters
+    if force_ip6tnl and force_srh:
+        logging.fatal('Error: force-ip6tnl and force-srh argument cannot be '
+                      'set together')
+        exit(-1)
     # Create a new EveryWAN Edge Device
     ew_edge_device = EWEdgeDevice(
         sb_interface=sb_interface,
