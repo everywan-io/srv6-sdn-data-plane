@@ -68,6 +68,7 @@ from srv6_sdn_proto import status_codes_pb2
 from srv6_sdn_proto import network_events_listener_pb2
 from srv6_sdn_proto import network_events_listener_pb2_grpc
 from srv6_sdn_proto import gre_interface_pb2
+from srv6_sdn_proto import ip_tunnel_interface_pb2
 #from .sb_grpc_utils import InvalidAddressFamilyError
 from .sb_grpc_utils import InvalidAddressFamilyError, getAddressFamily
 
@@ -968,6 +969,53 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
         # and create the response
         return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
 
+    def HandleIPTunnelRequest(self, op, request, context):
+        logging.debug('config received:\n%s', request)
+        # Let's process the request
+        try:
+            for ip_tunnel in request.ip_tunnels:
+                if op == 'add':
+                    # Extract the tunnel type
+                    if ip_tunnel.tunnel_type == ip_tunnel_interface_pb2.IPTunnelType.IP4IP4:
+                        ip_route.link(op, ifname=ip_tunnel.ifname,
+                                        kind='sit',
+                                        ip6tnl_local=ip_tunnel.local_addr,
+                                        ip6tnl_remote=ip_tunnel.remote_addr,
+                                        ip6tnl_mode='ipip')
+                    elif ip_tunnel.tunnel_type == ip_tunnel_interface_pb2.IPTunnelType.IP4IP6:
+                        ip_route.link(op, ifname=ip_tunnel.ifname,
+                                        kind='ip6tnl',
+                                        ip6tnl_local=ip_tunnel.local_addr,
+                                        ip6tnl_remote=ip_tunnel.remote_addr,
+                                        ip6tnl_mode='ipip6')
+                    elif ip_tunnel.tunnel_type == ip_tunnel_interface_pb2.IPTunnelType.IP6IP4:
+                        ip_route.link(op, ifname=ip_tunnel.ifname,
+                                        kind='sit',
+                                        ip6tnl_local=ip_tunnel.local_addr,
+                                        ip6tnl_remote=ip_tunnel.remote_addr,
+                                        ip6tnl_mode='ip6ip')
+                    elif ip_tunnel.tunnel_type == ip_tunnel_interface_pb2.IPTunnelType.IP6IP6:
+                        ip_route.link(op, ifname=ip_tunnel.ifname,
+                                        kind='ip6tnl',
+                                        ip6tnl_local=ip_tunnel.local_addr,
+                                        ip6tnl_remote=ip_tunnel.remote_addr,
+                                        ip6tnl_mode='ip6ip6')
+                    else:
+                        logging.error('Invalid tunnel type: %s', ip_tunnel.tunnel_type)
+                        return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_INTERNAL_ERROR)
+                    # Enable the new interface
+                    ifindex = ip_route.link_lookup(ifname=ip_tunnel.ifname)[0]
+                    ip_route.link('set', index=ifindex, state='up')
+                elif op == 'del':
+                    ip_route.link(op, ifname=ip_tunnel.ifname)
+                else:
+                    # Operation unknown: this is a bug
+                    logging.error('Unrecognized operation: %s' % op)
+            logging.debug('Send response: OK')
+            return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+        except NetlinkError as e:
+            return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
+
     def Execute(self, op, request, context):
         entity_type = request.entity_type
         # Handle operation
@@ -1009,7 +1057,10 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
             return self.HandleIPVxLANRequest(op, request, context)
         elif entity_type == srv6_manager_pb2.IPfdbentries:
             request = request.fdbentries_request
-            return self.HandleIPfdbentriesRequest(op, request, context)    
+            return self.HandleIPfdbentriesRequest(op, request, context)  
+        elif entity_type == srv6_manager_pb2.IPTunnel:
+            request = request.iptunnel_request
+            return self.HandleIPTunnelRequest(op, request, context)    
         else:
             return (srv6_manager_pb2
                     .SRv6ManagerReply(status=status_codes_pb2.STATUS_INVALID_GRPC_REQUEST))
