@@ -73,6 +73,11 @@ DEFAULT_KEEP_ALIVE_INTERVAL = 30
 DEFAULT_VXLAN_PORT = 4789
 # File containing the token
 DEFAULT_TOKEN_FILE = 'token'
+# Supported Segment Routing transparency settings
+SUPPORTED_SR_TRANSPARENCY = ['t0', 't1', 'op']
+# Default settings for Segment Routing transparency
+DEFAULT_INCOMING_SR_TRANSPARENCY = SUPPORTED_SR_TRANSPARENCY[0]
+DEFAULT_OUTGOING_SR_TRANSPARENCY = SUPPORTED_SR_TRANSPARENCY[0]
 
 
 class EWEdgeDevice(object):
@@ -99,6 +104,8 @@ class EWEdgeDevice(object):
                  enable_proxy_ndp=False,
                  force_ip6tnl=False,
                  force_srh=False,
+                 incoming_sr_transparency=DEFAULT_INCOMING_SR_TRANSPARENCY,
+                 outgoing_sr_transparency=DEFAULT_OUTGOING_SR_TRANSPARENCY,
                  verbose=DEFAULT_VERBOSE):
         # Verbose mode
         self.VERBOSE = verbose
@@ -162,6 +169,10 @@ class EWEdgeDevice(object):
         # False, the device will use IP(4|6) over IPv6 encapsulation or
         # IPv6+SRH encapsulation depending on the situation
         self.force_srh = force_srh
+        # Incoming Segment Routing transparency [ t0 | t1 | op ]
+        self.incoming_sr_transparency = incoming_sr_transparency
+        # Outgoing Segment Routing transparency [ t0 | t1 | op ]
+        self.outgoing_sr_transparency = outgoing_sr_transparency
         # Print configuration
         if self.VERBOSE:
             print()
@@ -200,6 +211,8 @@ class EWEdgeDevice(object):
             enable_proxy_ndp = self.enable_proxy_ndp,
             force_ip6tnl = self.force_ip6tnl,
             force_srh = self.force_srh,
+            incoming_sr_transparency = self.incoming_sr_transparency,
+            outgoing_sr_transparency = self.outgoing_sr_transparency,
             stop_event=stop_event,
             debug=self.VERBOSE)
         # Run registration client
@@ -366,6 +379,16 @@ def parseArguments():
     parser.add_argument('--force-srh', dest='force_srh',
                         action='store_true', default=False,
                         help='Define whether to force SRH or not')
+    # Incoming Segment Routing transparency [ t0 | t1 | op ]
+    parser.add_argument('--incoming-sr-transparency', dest='incoming_sr_transparency',
+                        action='store', default=DEFAULT_INCOMING_SR_TRANSPARENCY,
+                        choices=SUPPORTED_SR_TRANSPARENCY,
+                        help='Incoming Segment Routing transparency [ t0 | t1 | op ]')
+    # Outgoing Segment Routing transparency [ t0 | t1 | op ]
+    parser.add_argument('--outgoing-sr-transparency', dest='outgoing_sr_transparency',
+                        action='store', default=DEFAULT_OUTGOING_SR_TRANSPARENCY,
+                        choices=SUPPORTED_SR_TRANSPARENCY,
+                        help='Outgoing Segment Routing transparency [ t0 | t1 | op ]')
     # Config file
     parser.add_argument('-c', '--config-file', dest='config_file',
                         action='store', default=None,
@@ -404,6 +427,8 @@ def parse_config_file(config_file):
         enable_proxy_ndp = None
         force_ip6tnl = None
         force_srh = None
+        incoming_sr_transparency = None
+        outgoing_sr_transparency = None
 
     args = Args()
     # Get parser
@@ -471,6 +496,10 @@ def parse_config_file(config_file):
     args.force_ip6tnl = config['DEFAULT'].get('force_ip6tnl', False)
     # Define whether to force the device to use SRH or not
     args.force_srh = config['DEFAULT'].get('force_srh', False)
+    # Incoming Segment Routing transparency [ t0, t1, op ]
+    args.incoming_sr_transparency = config['DEFAULT'].get('incoming-sr-transparency', DEFAULT_INCOMING_SR_TRANSPARENCY)
+    # Outgoing Segment Routing transparency [ t0, t1, op ]
+    args.outgoing_sr_transparency = config['DEFAULT'].get('outgoing-sr-transparency', DEFAULT_OUTGOING_SR_TRANSPARENCY)
     # Interval between two consecutive keep alive messages
     args.token_file = config['DEFAULT'].get('token_file', DEFAULT_TOKEN_FILE)
     # Done, return
@@ -545,6 +574,10 @@ def _main():
     force_ip6tnl = args.force_ip6tnl
     # Define whether to force the device to use SRH or not
     force_srh = args.force_srh
+    # Incoming Segment Routing Transparency [ t0, t1, op ]
+    incoming_sr_transparency = args.incoming_sr_transparency
+    # Outgoing Segment Routing Transparency [ t0, t1, op ]
+    outgoing_sr_transparency = args.outgoing_sr_transparency
     #
     # Check debug level
     SERVER_DEBUG = logger.getEffectiveLevel() == logging.DEBUG
@@ -558,6 +591,17 @@ def _main():
     if force_ip6tnl and force_srh:
         logging.fatal('Error: force-ip6tnl and force-srh argument cannot be '
                       'set together')
+        exit(-1)
+    # Check transparency settings
+    if incoming_sr_transparency not in SUPPORTED_SR_TRANSPARENCY:
+        logging.fatal('Invalid value %s for paramter '
+                      'incoming-sr-transparency. Supported values: %s',
+                      incoming_sr_transparency, SUPPORTED_SR_TRANSPARENCY)
+        exit(-1)
+    if outgoing_sr_transparency not in SUPPORTED_SR_TRANSPARENCY:
+        logging.fatal('Invalid value %s for paramter '
+                      'outgoing-sr-transparency. Supported values: %s',
+                      outgoing_sr_transparency, SUPPORTED_SR_TRANSPARENCY)
         exit(-1)
     # Create a new EveryWAN Edge Device
     ew_edge_device = EWEdgeDevice(
@@ -584,6 +628,8 @@ def _main():
         enable_proxy_ndp=enable_proxy_ndp,
         force_ip6tnl=force_ip6tnl,
         force_srh=force_srh,
+        incoming_sr_transparency=incoming_sr_transparency,
+        outgoing_sr_transparency=outgoing_sr_transparency,
         verbose=verbose
     )
     # Start the edge device
