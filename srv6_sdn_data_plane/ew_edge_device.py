@@ -436,9 +436,9 @@ def parse_config_file(config_file):
     # Read configuration file
     config.read(config_file)
     # Enable debug logs
-    args.debug = config['DEFAULT'].get('debug', False)
+    args.debug = config['DEFAULT'].getboolean('debug', False)
     # Verbose mode
-    args.verbose = config['DEFAULT'].get('verbose', False)
+    args.verbose = config['DEFAULT'].getboolean('verbose', False)
     # Southbound interface
     args.sb_interface = config['DEFAULT'].get('sb_interface', DEFAULT_SB_INTERFACE)
     # IP address of the southbound gRPC server
@@ -447,7 +447,7 @@ def parse_config_file(config_file):
     args.grpc_server_port = config['DEFAULT'].get(
         'grpc_server_port', DEFAULT_GRPC_SERVER_PORT)
     # Enable secure mode
-    args.secure = config['DEFAULT'].get('secure', DEFAULT_SECURE)
+    args.secure = config['DEFAULT'].getboolean('secure', DEFAULT_SECURE)
     # Server certificate
     args.server_cert = config['DEFAULT'].get('server_cert', DEFAULT_CERTIFICATE)
     # Server key
@@ -491,11 +491,11 @@ def parse_config_file(config_file):
     if args.public_prefix_length is not None:
         args.public_prefix_length = int(args.public_prefix_length)
     # Define whether to enable or not proxy NDP for SIDs advertisement
-    args.enable_proxy_ndp = config['DEFAULT'].get('enable_proxy_ndp', True)
+    args.enable_proxy_ndp = config['DEFAULT'].getboolean('enable_proxy_ndp', True)
     # Define whether to force the device to use ip6tnl or not
-    args.force_ip6tnl = config['DEFAULT'].get('force_ip6tnl', False)
+    args.force_ip6tnl = config['DEFAULT'].getboolean('force_ip6tnl', False)
     # Define whether to force the device to use SRH or not
-    args.force_srh = config['DEFAULT'].get('force_srh', False)
+    args.force_srh = config['DEFAULT'].getboolean('force_srh', False)
     # Incoming Segment Routing transparency [ t0, t1, op ]
     args.incoming_sr_transparency = config['DEFAULT'].get('incoming-sr-transparency', DEFAULT_INCOMING_SR_TRANSPARENCY)
     # Outgoing Segment Routing transparency [ t0, t1, op ]
