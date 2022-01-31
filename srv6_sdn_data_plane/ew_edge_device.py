@@ -191,6 +191,19 @@ class EWEdgeDevice(object):
             print('*** gRPC server port: %s' % self.grpc_server_port)
             print('*** pymerang server IP: %s' % self.pymerang_server_ip)
             print('*** pymerang server port: %s' % self.pymerang_server_port)
+            print('*** Keep-alive Interval: %s' % self.keep_alive_interval)
+            print('*** SID prefix: %s' % self.sid_prefix)
+            print('*** Public prefix length: %s' % self.public_prefix_length)
+            print('*** Proxy NDP: %s' % ('Enabled'
+                  if self.enable_proxy_ndp else 'Disabled'))
+            print('*** Force ip6tnl: %s' % ('Enabled'
+                  if self.force_ip6tnl else 'Disabled'))
+            print('*** Force srh: %s' % ('Enabled'
+                  if self.force_srh else 'Disabled'))
+            print('*** Incoming SR Transparency: %s' %
+                  self.incoming_sr_transparency)
+            print('*** Outgoing SR Transparency: %s' %
+                  self.outgoing_sr_transparency)
             print()
 
     # Start registration client
@@ -208,11 +221,11 @@ class EWEdgeDevice(object):
             keep_alive_interval=self.keep_alive_interval,
             sid_prefix=self.sid_prefix,
             public_prefix_length=self.public_prefix_length,
-            enable_proxy_ndp = self.enable_proxy_ndp,
-            force_ip6tnl = self.force_ip6tnl,
-            force_srh = self.force_srh,
-            incoming_sr_transparency = self.incoming_sr_transparency,
-            outgoing_sr_transparency = self.outgoing_sr_transparency,
+            enable_proxy_ndp=self.enable_proxy_ndp,
+            force_ip6tnl=self.force_ip6tnl,
+            force_srh=self.force_srh,
+            incoming_sr_transparency=self.incoming_sr_transparency,
+            outgoing_sr_transparency=self.outgoing_sr_transparency,
             stop_event=stop_event,
             debug=self.VERBOSE)
         # Run registration client
@@ -440,16 +453,19 @@ def parse_config_file(config_file):
     # Verbose mode
     args.verbose = config['DEFAULT'].getboolean('verbose', False)
     # Southbound interface
-    args.sb_interface = config['DEFAULT'].get('sb_interface', DEFAULT_SB_INTERFACE)
+    args.sb_interface = config['DEFAULT'].get(
+        'sb_interface', DEFAULT_SB_INTERFACE)
     # IP address of the southbound gRPC server
-    args.grpc_server_ip = config['DEFAULT'].get('grpc_server_ip', DEFAULT_GRPC_SERVER_IP)
+    args.grpc_server_ip = config['DEFAULT'].get(
+        'grpc_server_ip', DEFAULT_GRPC_SERVER_IP)
     # Port of the southbound gRPC server
     args.grpc_server_port = config['DEFAULT'].get(
         'grpc_server_port', DEFAULT_GRPC_SERVER_PORT)
     # Enable secure mode
     args.secure = config['DEFAULT'].getboolean('secure', DEFAULT_SECURE)
     # Server certificate
-    args.server_cert = config['DEFAULT'].get('server_cert', DEFAULT_CERTIFICATE)
+    args.server_cert = config['DEFAULT'].get(
+        'server_cert', DEFAULT_CERTIFICATE)
     # Server key
     args.server_key = config['DEFAULT'].get('server_key', DEFAULT_KEY)
     # Password used to log in to ospf6d and zebra daemons
@@ -458,7 +474,8 @@ def parse_config_file(config_file):
     # Port used to log in to zebra daemon
     args.zebra_port = config['DEFAULT'].get('zebra_port', DEFAULT_ZEBRA_PORT)
     # Port used to log in to ospf6d daemon
-    args.ospf6d_port = config['DEFAULT'].get('ospf6d_port', DEFAULT_OSPF6D_PORT)
+    args.ospf6d_port = config['DEFAULT'].get(
+        'ospf6d_port', DEFAULT_OSPF6D_PORT)
     # IP address of the gRPC registration server
     args.pymerang_server_ip = config['DEFAULT'].get(
         'pymerang_server_ip', DEFAULT_PYMERANG_SERVER_IP)
@@ -491,15 +508,18 @@ def parse_config_file(config_file):
     if args.public_prefix_length is not None:
         args.public_prefix_length = int(args.public_prefix_length)
     # Define whether to enable or not proxy NDP for SIDs advertisement
-    args.enable_proxy_ndp = config['DEFAULT'].getboolean('enable_proxy_ndp', True)
+    args.enable_proxy_ndp = config['DEFAULT'].getboolean(
+        'enable_proxy_ndp', True)
     # Define whether to force the device to use ip6tnl or not
     args.force_ip6tnl = config['DEFAULT'].getboolean('force_ip6tnl', False)
     # Define whether to force the device to use SRH or not
     args.force_srh = config['DEFAULT'].getboolean('force_srh', False)
     # Incoming Segment Routing transparency [ t0, t1, op ]
-    args.incoming_sr_transparency = config['DEFAULT'].get('incoming-sr-transparency', DEFAULT_INCOMING_SR_TRANSPARENCY)
+    args.incoming_sr_transparency = config['DEFAULT'].get(
+        'incoming-sr-transparency', DEFAULT_INCOMING_SR_TRANSPARENCY)
     # Outgoing Segment Routing transparency [ t0, t1, op ]
-    args.outgoing_sr_transparency = config['DEFAULT'].get('outgoing-sr-transparency', DEFAULT_OUTGOING_SR_TRANSPARENCY)
+    args.outgoing_sr_transparency = config['DEFAULT'].get(
+        'outgoing-sr-transparency', DEFAULT_OUTGOING_SR_TRANSPARENCY)
     # Interval between two consecutive keep alive messages
     args.token_file = config['DEFAULT'].get('token_file', DEFAULT_TOKEN_FILE)
     # Done, return
