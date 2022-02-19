@@ -6,11 +6,13 @@ from __future__ import print_function
 import configparser
 import time
 import os
+import signal
 import sys
 import json
 import threading
 import logging
 from filelock import FileLock
+from functools import partial
 from argparse import ArgumentParser
 from threading import Thread
 from threading import Lock
@@ -106,6 +108,7 @@ class EWEdgeDevice(object):
                  force_srh=False,
                  incoming_sr_transparency=DEFAULT_INCOMING_SR_TRANSPARENCY,
                  outgoing_sr_transparency=DEFAULT_OUTGOING_SR_TRANSPARENCY,
+                 allow_reboot=False,
                  verbose=DEFAULT_VERBOSE):
         # Verbose mode
         self.VERBOSE = verbose
@@ -173,6 +176,8 @@ class EWEdgeDevice(object):
         self.incoming_sr_transparency = incoming_sr_transparency
         # Outgoing Segment Routing transparency [ t0 | t1 | op ]
         self.outgoing_sr_transparency = outgoing_sr_transparency
+        # Is reboot allowed?
+        self.allow_reboot = allow_reboot
         # Print configuration
         if self.VERBOSE:
             print()
@@ -204,6 +209,7 @@ class EWEdgeDevice(object):
                   self.incoming_sr_transparency)
             print('*** Outgoing SR Transparency: %s' %
                   self.outgoing_sr_transparency)
+            print('*** Allow reboot: %s' % self.allow_reboot)
             print()
 
     # Start registration client
@@ -226,6 +232,7 @@ class EWEdgeDevice(object):
             force_srh=self.force_srh,
             incoming_sr_transparency=self.incoming_sr_transparency,
             outgoing_sr_transparency=self.outgoing_sr_transparency,
+            allow_reboot=self.allow_reboot,
             stop_event=stop_event,
             debug=self.VERBOSE)
         # Run registration client
@@ -236,6 +243,10 @@ class EWEdgeDevice(object):
         if self.enable_proxy_ndp:
             os.system('sysctl -w net.ipv6.conf.all.proxy_ndp=1')
 
+    def gracefully_exit(self, stop_event, signum, frame):
+        logging.info('CTRL+C pressed. Gracefully exit.')
+        stop_event.set()
+
     # Run the EveryWAN Edge Device
 
     def run(self):
@@ -243,6 +254,9 @@ class EWEdgeDevice(object):
             print('*** Starting the EveryWAN Edge Device')
         # Stop event
         stop_event = threading.Event()
+        # Register handler to gracefully exit when CTRL+C is pressed
+        if stop_event is not None:
+            signal.signal(signal.SIGINT, partial(self.gracefully_exit, stop_event))
         # Initialize the EveryEdge device
         self.init_ew_edge_device()
         # Start registration server
@@ -402,6 +416,10 @@ def parseArguments():
                         action='store', default=DEFAULT_OUTGOING_SR_TRANSPARENCY,
                         choices=SUPPORTED_SR_TRANSPARENCY,
                         help='Outgoing Segment Routing transparency [ t0 | t1 | op ]')
+    # Is reboot allowed?
+    parser.add_argument('--allow-reboot', dest='allow_reboot',
+                        action='store_true', default=False,
+                        help='Is reboot allowed?')
     # Config file
     parser.add_argument('-c', '--config-file', dest='config_file',
                         action='store', default=None,
@@ -442,6 +460,7 @@ def parse_config_file(config_file):
         force_srh = None
         incoming_sr_transparency = None
         outgoing_sr_transparency = None
+        allow_reboot = None
 
     args = Args()
     # Get parser
@@ -520,6 +539,8 @@ def parse_config_file(config_file):
     # Outgoing Segment Routing transparency [ t0, t1, op ]
     args.outgoing_sr_transparency = config['DEFAULT'].get(
         'outgoing-sr-transparency', DEFAULT_OUTGOING_SR_TRANSPARENCY)
+    # Is reboot allowed?
+    args.allow_reboot = config['DEFAULT'].get('allow-reboot', False)
     # Interval between two consecutive keep alive messages
     args.token_file = config['DEFAULT'].get('token_file', DEFAULT_TOKEN_FILE)
     # Done, return
@@ -598,6 +619,8 @@ def _main():
     incoming_sr_transparency = args.incoming_sr_transparency
     # Outgoing Segment Routing Transparency [ t0, t1, op ]
     outgoing_sr_transparency = args.outgoing_sr_transparency
+    # Is reboot allowed
+    allow_reboot = args.allow_reboot
     #
     # Check debug level
     SERVER_DEBUG = logger.getEffectiveLevel() == logging.DEBUG
@@ -650,6 +673,7 @@ def _main():
         force_srh=force_srh,
         incoming_sr_transparency=incoming_sr_transparency,
         outgoing_sr_transparency=outgoing_sr_transparency,
+        allow_reboot=allow_reboot,
         verbose=verbose
     )
     # Start the edge device
