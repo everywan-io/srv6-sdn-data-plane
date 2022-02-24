@@ -163,11 +163,12 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
 
     def __init__(self, quagga_password=DEFAULT_QUAGGA_PASSWORD,
                  zebra_port=DEFAULT_ZEBRA_PORT, ospf6d_port=DEFAULT_OSPF6D_PORT,
-                 stop_event=None):
+                 stop_event=None, reboot_required=None):
         self.quagga_password = quagga_password
         self.zebra_port = zebra_port
         self.ospf6d_port = ospf6d_port
         self.stop_event = stop_event
+        self.reboot_required = reboot_required
 
     def parse_netlink_error(self, e):
         if e.code == NETLINK_ERROR_FILE_EXISTS:
@@ -190,6 +191,9 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
         logging.info('\n\nShutdownDevice command received')
         # Set the stop flag to trigger the server shutdown
         self.stop_event.set()
+        # Require a reboot
+        if self.reboot_required is not None:
+            self.reboot_required.set()
         return srv6_manager_pb2.SRv6ManagerReply(
             status=status_codes_pb2.STATUS_SUCCESS)
 
@@ -1198,7 +1202,8 @@ def start_server(grpc_ip=DEFAULT_GRPC_IP,
                  secure=DEFAULT_SECURE,
                  certificate=DEFAULT_CERTIFICATE,
                  key=DEFAULT_KEY,
-                 stop_event=None):
+                 stop_event=None,
+                 reboot_required=None):
     # Configure gRPC server listener and ip route
     global grpc_server, ip_route, ipdb
     # Setup gRPC server
@@ -1213,7 +1218,8 @@ def start_server(grpc_ip=DEFAULT_GRPC_IP,
             stamp_reflector_module.run_grpc_server(server=grpc_server)
         (srv6_manager_pb2_grpc
          .add_SRv6ManagerServicer_to_server(
-             SRv6Manager(quagga_password, zebra_port, ospf6d_port, stop_event),
+             SRv6Manager(quagga_password, zebra_port, ospf6d_port, stop_event,
+                         reboot_required),
              grpc_server)
         )
         (network_events_listener_pb2_grpc

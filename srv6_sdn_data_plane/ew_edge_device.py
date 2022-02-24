@@ -70,7 +70,7 @@ DEFAULT_NAT_DISCOVERY_SERVER_PORT = 3478
 # Config file
 DEFAULT_CONFIG_FILE = '/tmp/config.json'
 # Default interval between two keep alive messages
-DEFAULT_KEEP_ALIVE_INTERVAL = 30
+DEFAULT_KEEP_ALIVE_INTERVAL = 5
 # Source port of the NAT discovery
 DEFAULT_VXLAN_PORT = 4789
 # File containing the token
@@ -213,7 +213,8 @@ class EWEdgeDevice(object):
             print()
 
     # Start registration client
-    def start_registration_client(self, stop_event=None):
+    def start_registration_client(self, stop_event=None,
+                                  reboot_required=None):
         logging.info('*** Starting registration client')
         registration_client = PymerangDevice(
             server_ip=self.pymerang_server_ip,
@@ -234,6 +235,7 @@ class EWEdgeDevice(object):
             outgoing_sr_transparency=self.outgoing_sr_transparency,
             allow_reboot=self.allow_reboot,
             stop_event=stop_event,
+            reboot_required=reboot_required,
             debug=self.VERBOSE)
         # Run registration client
         registration_client.run()
@@ -254,15 +256,18 @@ class EWEdgeDevice(object):
             print('*** Starting the EveryWAN Edge Device')
         # Stop event
         stop_event = threading.Event()
+        # Reboot required event
+        reboot_required = threading.Event()
         # Register handler to gracefully exit when CTRL+C is pressed
         if stop_event is not None:
             signal.signal(signal.SIGINT, partial(self.gracefully_exit, stop_event))
+            signal.signal(signal.SIGTERM, partial(self.gracefully_exit, stop_event))
         # Initialize the EveryEdge device
         self.init_ew_edge_device()
         # Start registration server
         thread = Thread(
             target=self.start_registration_client,
-            args=(stop_event,)
+            args=(stop_event, reboot_required)
         )
         # thread.daemon = True
         thread.start()
@@ -281,7 +286,8 @@ class EWEdgeDevice(object):
             quagga_password=self.quagga_password,
             zebra_port=self.zebra_port,
             ospf6d_port=self.ospf6d_port,
-            stop_event=stop_event
+            stop_event=stop_event,
+            reboot_required=reboot_required
         )
 
 
