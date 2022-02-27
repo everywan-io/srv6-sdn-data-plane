@@ -20,40 +20,32 @@ from pyroute2.netlink.exceptions import NetlinkError
 from pyroute2.netlink.rtnl import ndmsg
 
 if sys.version_info >= (3, 0):
-    from pyroute2.netlink.nlsocket import Stats
-
-# STAMP Support
-ENABLE_STAMP_SUPPORT = True
-
-# Import modules required by STAMP
-if ENABLE_STAMP_SUPPORT:
-    from srv6_delay_measurement import sender as stamp_sender_module
-    from srv6_delay_measurement import reflector as stamp_reflector_module
+    from pyroute2.netlink.nlsocket import Stats  # noqa F401
 
 
-################## Setup these variables ##################
+# ################## Setup these variables ##################
 
 # Path of the proto files
-#PROTO_FOLDER = '../../../srv6-sdn-proto/'
+# PROTO_FOLDER = '../../../srv6-sdn-proto/'
 
-###########################################################
+# ###########################################################
 
 # Adjust relative paths
-#script_path = os.path.dirname(os.path.abspath(__file__))
-#PROTO_FOLDER = os.path.join(script_path, PROTO_FOLDER)
+# script_path = os.path.dirname(os.path.abspath(__file__))
+# PROTO_FOLDER = os.path.join(script_path, PROTO_FOLDER)
 
 # Check paths
-#if PROTO_FOLDER == '':
+# if PROTO_FOLDER == '':
 #    print('Error: Set PROTO_FOLDER variable '
 #          'in sb_grpc_server.py')
 #    sys.exit(-2)
-#if not os.path.exists(PROTO_FOLDER):
+# if not os.path.exists(PROTO_FOLDER):
 #    print('Error: PROTO_FOLDER variable in sb_grpc_server.py '
 #          'points to a non existing folder\n')
 #    sys.exit(-2)
 
 # Add path of proto files
-#sys.path.append(PROTO_FOLDER)
+# sys.path.append(PROTO_FOLDER)
 
 # SRv6 dependencies
 from srv6_sdn_proto import srv6_manager_pb2_grpc
@@ -62,9 +54,18 @@ from srv6_sdn_proto import status_codes_pb2
 from srv6_sdn_proto import network_events_listener_pb2
 from srv6_sdn_proto import network_events_listener_pb2_grpc
 from srv6_sdn_proto import gre_interface_pb2
-from srv6_sdn_proto import ip_tunnel_interface_pb2
-#from .sb_grpc_utils import InvalidAddressFamilyError
+# from srv6_sdn_proto import ip_tunnel_interface_pb2
+from srv6_sdn_proto.ip_tunnel_interface_pb2 import IPTunnelType
+# from .sb_grpc_utils import InvalidAddressFamilyError
 from .sb_grpc_utils import InvalidAddressFamilyError, getAddressFamily
+
+# STAMP Support
+ENABLE_STAMP_SUPPORT = True
+
+# Import modules required by STAMP
+if ENABLE_STAMP_SUPPORT:
+    from srv6_delay_measurement import sender as stamp_sender_module
+    from srv6_delay_measurement import reflector as stamp_reflector_module
 
 # Global variables definition
 
@@ -83,14 +84,16 @@ RT_SCOPES = {
 }
 
 EVENT_TYPES = {
-    'CONNECTION_ESTABLISHED': network_events_listener_pb2 \
-                                  .NetworkEvent.CONNECTION_ESTABLISHED,
+    'CONNECTION_ESTABLISHED': (
+        network_events_listener_pb2.NetworkEvent.CONNECTION_ESTABLISHED
+    ),
     'INTF_UP': network_events_listener_pb2.NetworkEvent.INTF_UP,
     'INTF_DOWN': network_events_listener_pb2.NetworkEvent.INTF_DOWN,
     'INTF_DEL': network_events_listener_pb2.NetworkEvent.INTF_DEL,
     'NEW_ADDR': network_events_listener_pb2.NetworkEvent.NEW_ADDR,
     'DEL_ADDR': network_events_listener_pb2.NetworkEvent.DEL_ADDR
 }
+
 
 class RTM_TYPES:
     RTN_UNSPEC = 0
@@ -155,9 +158,14 @@ NETLINK_ERROR_OPERATION_NOT_SUPPORTED = 95
 class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
     '''gRPC request handler'''
 
-    def __init__(self, quagga_password=DEFAULT_QUAGGA_PASSWORD,
-                 zebra_port=DEFAULT_ZEBRA_PORT, ospf6d_port=DEFAULT_OSPF6D_PORT,
-                 stop_event=None, reboot_required=None):
+    def __init__(
+        self,
+        quagga_password=DEFAULT_QUAGGA_PASSWORD,
+        zebra_port=DEFAULT_ZEBRA_PORT,
+        ospf6d_port=DEFAULT_OSPF6D_PORT,
+        stop_event=None,
+        reboot_required=None
+    ):
         self.quagga_password = quagga_password
         self.zebra_port = zebra_port
         self.ospf6d_port = ospf6d_port
@@ -178,7 +186,7 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
             logging.warning('Netlink error: Operation not supported')
             return status_codes_pb2.STATUS_OPERATION_NOT_SUPPORTED
         else:
-            logging.warning('Generic internal error: %s' % e)
+            logging.warning('Generic internal error: %s', e)
             status_codes_pb2.STATUS_INTERNAL_ERROR
 
     def ShutdownDevice(self, request, context):
@@ -189,7 +197,8 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
         if self.reboot_required is not None:
             self.reboot_required.set()
         return srv6_manager_pb2.SRv6ManagerReply(
-            status=status_codes_pb2.STATUS_SUCCESS)
+            status=status_codes_pb2.STATUS_SUCCESS
+        )
 
     def HandleSRv6ExplicitPathRequest(self, op, request, context):
         logging.debug('config received:\n%s', request)
@@ -211,20 +220,30 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                         oif = idxs[path.device]
                     else:
                         oif = None
-                    ip_route.route(op, dst=path.destination, oif=oif,
-                                   table=table,
-                                   encap={'type': 'seg6',
-                                          'mode': path.encapmode,
-                                          'segs': segments})
+                    ip_route.route(
+                        op,
+                        dst=path.destination,
+                        oif=oif,
+                        table=table,
+                        encap={
+                            'type': 'seg6',
+                            'mode': path.encapmode,
+                            'segs': segments
+                        }
+                    )
             else:
                 # Operation unknown: this is a bug
-                logging.error('Unrecognized operation: %s' % op)
+                logging.error('Unrecognized operation: %s', op)
                 exit(-1)
             # and create the response
             logging.debug('Send response: OK')
-            return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+            return srv6_manager_pb2.SRv6ManagerReply(
+                status=status_codes_pb2.STATUS_SUCCESS
+            )
         except NetlinkError as e:
-            return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
+            return srv6_manager_pb2.SRv6ManagerReply(
+                status=self.parse_netlink_error(e)
+            )
 
     def HandleSRv6LocalProcessingFunctionRequest(self, op, request, context):
         logging.debug('config received:\n%s', request)
@@ -246,106 +265,178 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                 # Perform operation
                 if op == 'del':
                     # Delete a route
-                    ip_route.route(op, family=AF_INET6, dst=segment,
-                                   table=localsid_table)
+                    ip_route.route(
+                        op, family=AF_INET6, dst=segment, table=localsid_table
+                    )
                 elif op == 'add':
                     # Add a new route
                     if action == 'End':
-                        ip_route.route(op, family=AF_INET6, dst=segment,
-                                       oif=idxs[device],
-                                       table=localsid_table,
-                                       encap={'type': 'seg6local',
-                                              'action': 'End'})
+                        ip_route.route(
+                            op,
+                            family=AF_INET6,
+                            dst=segment,
+                            oif=idxs[device],
+                            table=localsid_table,
+                            encap={
+                                'type': 'seg6local',
+                                'action': 'End'
+                            }
+                        )
                     elif action == 'End.X':
-                        ip_route.route(op, family=AF_INET6, dst=segment,
-                                       oif=idxs[device],
-                                       table=localsid_table,
-                                       encap={'type': 'seg6local',
-                                              'action': 'End.X',
-                                              'nh6': nexthop})
+                        ip_route.route(
+                            op,
+                            family=AF_INET6,
+                            dst=segment,
+                            oif=idxs[device],
+                            table=localsid_table,
+                            encap={
+                                'type': 'seg6local',
+                                'action': 'End.X',
+                                'nh6': nexthop
+                            }
+                        )
                     elif action == 'End.T':
-                        ip_route.route(op, family=AF_INET6, dst=segment,
-                                       oif=idxs[device],
-                                       table=localsid_table,
-                                       encap={'type': 'seg6local',
-                                              'action': 'End.T',
-                                              'table': table})
+                        ip_route.route(
+                            op,
+                            family=AF_INET6,
+                            dst=segment,
+                            oif=idxs[device],
+                            table=localsid_table,
+                            encap={
+                                'type': 'seg6local',
+                                'action': 'End.T',
+                                'table': table
+                            }
+                        )
                     elif action == 'End.DX2':
-                        ip_route.route(op, family=AF_INET6, dst=segment,
-                                       oif=idxs[device],
-                                       table=localsid_table,
-                                       encap={'type': 'seg6local',
-                                              'action': 'End.DX2',
-                                              'oif': interface})
+                        ip_route.route(
+                            op,
+                            family=AF_INET6,
+                            dst=segment,
+                            oif=idxs[device],
+                            table=localsid_table,
+                            encap={
+                                'type': 'seg6local',
+                                'action': 'End.DX2',
+                                'oif': interface
+                            }
+                        )
                     elif action == 'End.DX6':
-                        ip_route.route(op, family=AF_INET6, dst=segment,
-                                       oif=idxs[device],
-                                       table=localsid_table,
-                                       encap={'type': 'seg6local',
-                                              'action': 'End.DX6',
-                                              'nh6': nexthop})
+                        ip_route.route(
+                            op,
+                            family=AF_INET6,
+                            dst=segment,
+                            oif=idxs[device],
+                            table=localsid_table,
+                            encap={
+                                'type': 'seg6local',
+                                'action': 'End.DX6',
+                                'nh6': nexthop
+                            }
+                        )
                     elif action == 'End.DX4':
-                        ip_route.route(op, family=AF_INET6, dst=segment,
-                                       oif=idxs[device],
-                                       table=localsid_table,
-                                       encap={'type': 'seg6local',
-                                              'action': 'End.DX4',
-                                              'nh4': nexthop})
+                        ip_route.route(
+                            op,
+                            family=AF_INET6,
+                            dst=segment,
+                            oif=idxs[device],
+                            table=localsid_table,
+                            encap={
+                                'type': 'seg6local',
+                                'action': 'End.DX4',
+                                'nh4': nexthop
+                            }
+                        )
                     elif action == 'End.DT6':
-                        ip_route.route(op, family=AF_INET6, dst=segment,
-                                       oif=idxs[device],
-                                       table=localsid_table,
-                                       encap={'type': 'seg6local',
-                                              'action': 'End.DT6',
-                                              'table': table})
+                        ip_route.route(
+                            op,
+                            family=AF_INET6,
+                            dst=segment,
+                            oif=idxs[device],
+                            table=localsid_table,
+                            encap={
+                                'type': 'seg6local',
+                                'action': 'End.DT6',
+                                'table': table
+                            }
+                        )
                     elif action == 'End.DT4':
-                        ip_route.route(op, family=AF_INET6, dst=segment,
-                                       oif=idxs[device],
-                                       table=localsid_table,
-                                       encap={'type': 'seg6local',
-                                              'action': 'End.DT4',
-                                              'vrf_table': table})
+                        ip_route.route(
+                            op,
+                            family=AF_INET6,
+                            dst=segment,
+                            oif=idxs[device],
+                            table=localsid_table,
+                            encap={
+                                'type': 'seg6local',
+                                'action': 'End.DT4',
+                                'vrf_table': table
+                            }
+                        )
                     elif action == 'End.DT46':
-                        ip_route.route(op, family=AF_INET6, dst=segment,
-                                       oif=idxs[device],
-                                       table=localsid_table,
-                                       encap={'type': 'seg6local',
-                                              'action': 'End.DT46',
-                                              'vrf_table': table})
+                        ip_route.route(
+                            op,
+                            family=AF_INET6,
+                            dst=segment,
+                            oif=idxs[device],
+                            table=localsid_table,
+                            encap={
+                                'type': 'seg6local',
+                                'action': 'End.DT46',
+                                'vrf_table': table
+                            }
+                        )
                     elif action == 'End.B6':
                         # Rebuild segments
                         segments = []
                         for srv6_segment in function.segs:
                             segments.append(srv6_segment.segment)
-                        ip_route.route(op, family=AF_INET6, dst=segment,
-                                       oif=idxs[device],
-                                       table=localsid_table,
-                                       encap={'type': 'seg6local',
-                                              'action': 'End.B6',
-                                              'srh': {'segs': segments}})
+                        ip_route.route(
+                            op,
+                            family=AF_INET6,
+                            dst=segment,
+                            oif=idxs[device],
+                            table=localsid_table,
+                            encap={
+                                'type': 'seg6local',
+                                'action': 'End.B6',
+                                'srh': {'segs': segments}
+                            }
+                        )
                     elif action == 'End.B6.Encaps':
                         # Rebuild segments
                         segments = []
                         for srv6_segment in function.segs:
                             segments.append(srv6_segment.segment)
-                        ip_route.route(op, family=AF_INET6, dst=segment,
-                                       oif=idxs[device],
-                                       table=localsid_table,
-                                       encap={'type': 'seg6local',
-                                              'action': 'End.B6.Encaps',
-                                              'srh': {'segs': segments}})
+                        ip_route.route(
+                            op,
+                            family=AF_INET6,
+                            dst=segment,
+                            oif=idxs[device],
+                            table=localsid_table,
+                            encap={
+                                'type': 'seg6local',
+                                'action': 'End.B6.Encaps',
+                                'srh': {'segs': segments}
+                            }
+                        )
                     else:
                         logging.debug('Error: Unrecognized action')
-                        return (srv6_manager_pb2
-                                .SRv6ManagerReply(status=status_codes_pb2.STATUS_INVALID_ACTION))
+                        return srv6_manager_pb2.SRv6ManagerReply(
+                            status=status_codes_pb2.STATUS_INVALID_ACTION
+                        )
                 else:
                     # Operation unknown: this is a bug
-                    logging.error('Unrecognized operation: %s' % op)
+                    logging.error('Unrecognized operation: %s', op)
             # and create the response
             logging.debug('Send response: OK')
-            return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+            return srv6_manager_pb2.SRv6ManagerReply(
+                status=status_codes_pb2.STATUS_SUCCESS
+            )
         except NetlinkError as e:
-            return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
+            return srv6_manager_pb2.SRv6ManagerReply(
+                status=self.parse_netlink_error(e)
+            )
 
     def HandleIPRuleRequest(self, op, request, context):
         logging.debug('config received:\n%s', request)
@@ -375,23 +466,36 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                     source = source if source != '' else None
                     src_len = src_len if src_len != -1 else None
                     in_interface = in_interface if in_interface != '' else None
-                    out_interface = out_interface if out_interface != '' else None
+                    out_interface = (
+                        out_interface if out_interface != '' else None
+                    )
                     # Create or delete the rule
-                    ip_route.rule(op, family=family, table=table,
-                                  priority=priority, action=action,
-                                  rtscope=scope,
-                                  dst=destination, dst_len=dst_len,
-                                  src=source, src_len=src_len,
-                                  iifname=in_interface,
-                                  oifname=out_interface)
+                    ip_route.rule(
+                        op,
+                        family=family,
+                        table=table,
+                        priority=priority,
+                        action=action,
+                        rtscope=scope,
+                        dst=destination,
+                        dst_len=dst_len,
+                        src=source,
+                        src_len=src_len,
+                        iifname=in_interface,
+                        oifname=out_interface
+                    )
             else:
                 # Operation unknown: this is a bug
-                logging.error('Unrecognized operation: %s' % op)
+                logging.error('Unrecognized operation: %s', op)
             # and create the response
             logging.debug('Send response: OK')
-            return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+            return srv6_manager_pb2.SRv6ManagerReply(
+                status=status_codes_pb2.STATUS_SUCCESS
+            )
         except NetlinkError as e:
-            return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
+            return srv6_manager_pb2.SRv6ManagerReply(
+                status=self.parse_netlink_error(e)
+            )
 
     def HandleIPRouteRequest(self, op, request, context):
         logging.debug('config received:\n%s', request)
@@ -422,39 +526,67 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                     proto = proto if proto != -1 else None
                     destination = destination if destination != '' else None
                     dst_len = dst_len if dst_len != -1 else None
-                    preferred_source = (preferred_source
-                                        if preferred_source != '' else None)
+                    preferred_source = (
+                        preferred_source if preferred_source != '' else None
+                    )
                     src_len = src_len if src_len != -1 else None
-                    in_interface = ip_route.link_lookup(ifname=in_interface)[0] if in_interface != '' else None
-                    out_interface = ip_route.link_lookup(ifname=out_interface)[0] if out_interface != '' else None
+                    in_interface = (
+                        ip_route.link_lookup(ifname=in_interface)[0]
+                        if in_interface != ''
+                        else None
+                    )
+                    out_interface = (
+                        ip_route.link_lookup(ifname=out_interface)[0]
+                        if out_interface != ''
+                        else None
+                    )
                     gateway = gateway if gateway != '' else None
                     # Let's push the route
                     if destination is None and op == 'del':
                         # Destination not specified, delete all the routes
-                        ip_route.flush_routes(table=table, tos=tos,
-                                              scope=scope, type=type,
-                                              proto=proto,
-                                              prefsrc=preferred_source,
-                                              src_len=src_len,
-                                              iif=in_interface, oif=out_interface,
-                                              gateway=gateway, family=family)
+                        ip_route.flush_routes(
+                            table=table,
+                            tos=tos,
+                            scope=scope,
+                            type=type,
+                            proto=proto,
+                            prefsrc=preferred_source,
+                            src_len=src_len,
+                            iif=in_interface,
+                            oif=out_interface,
+                            gateway=gateway,
+                            family=family
+                        )
                     else:
                         # Create or delete the route
-                        ip_route.route(op, table=table, tos=tos,
-                                       scope=scope, type=type,
-                                       proto=proto, dst=destination,
-                                       prefsrc=preferred_source,
-                                       src_len=src_len, dst_len=dst_len,
-                                       iif=in_interface, oif=out_interface,
-                                       gateway=gateway, family=family)
+                        ip_route.route(
+                            op,
+                            table=table,
+                            tos=tos,
+                            scope=scope,
+                            type=type,
+                            proto=proto,
+                            dst=destination,
+                            prefsrc=preferred_source,
+                            src_len=src_len,
+                            dst_len=dst_len,
+                            iif=in_interface,
+                            oif=out_interface,
+                            gateway=gateway,
+                            family=family
+                        )
             else:
                 # Operation unknown: this is a bug
-                logging.error('Unrecognized operation: %s' % op)
+                logging.error('Unrecognized operation: %s', op)
             # and create the response
             logging.debug('Send response: OK')
-            return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+            return srv6_manager_pb2.SRv6ManagerReply(
+                status=status_codes_pb2.STATUS_SUCCESS
+            )
         except NetlinkError as e:
-            return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
+            return srv6_manager_pb2.SRv6ManagerReply(
+                status=self.parse_netlink_error(e)
+            )
 
     def HandleIPAddrPyroute2Request(self, op, request, context):
         logging.debug('config received:\n%s', request)
@@ -475,15 +607,17 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                     # Get IP address
                     ip = str(addr.ip_addr)
                     # Get network prefix
-                    prefix = str(addr.net) if addr.net != '' else None
+                    # prefix = str(addr.net) if addr.net != '' else None
                     # Interface configuration
                     if family in [AF_INET, AF_INET6]:
                         # Add or Remove IPv6 address
                         try:
                             ip_route.addr(
-                                op, index=ip_route.link_lookup(ifname=device)[0],
+                                op,
+                                index=ip_route.link_lookup(ifname=device)[0],
                                 address=ip.split('/')[0],
-                                mask=int(ip.split('/')[1]), family=family
+                                mask=int(ip.split('/')[1]),
+                                family=family
                             )
                         except NetlinkError:
                             if not request.ignore_errors:
@@ -492,7 +626,8 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                         if op == 'del':
                             # Remove IPv4/IPv6 address
                             ip_route.addr(
-                                op, index=ip_route.link_lookup(ifname=device)[0],
+                                op,
+                                index=ip_route.link_lookup(ifname=device)[0],
                                 address=ip.split('/')[0],
                                 mask=int(ip.split('/')[1])
                             )
@@ -501,19 +636,26 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                     else:
                         raise InvalidAddressFamilyError
                     logging.debug('Send response: OK')
-                    return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+                    return srv6_manager_pb2.SRv6ManagerReply(
+                        status=status_codes_pb2.STATUS_SUCCESS
+                    )
             else:
                 # Operation unknown: this is a bug
-                logging.error('Unrecognized operation: %s' % op)
+                logging.error('Unrecognized operation: %s', op)
             # and create the response
             logging.debug('Send response: OK')
-            return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+            return srv6_manager_pb2.SRv6ManagerReply(
+                status=status_codes_pb2.STATUS_SUCCESS
+            )
         except InvalidAddressFamilyError:
             logging.debug('Send response: Invalid address family')
-            return (srv6_manager_pb2
-                    .SRv6ManagerReply(status=status_codes_pb2.STATUS_INVALID_ADDRESS))
+            return srv6_manager_pb2.SRv6ManagerReply(
+                status=status_codes_pb2.STATUS_INVALID_ADDRESS
+            )
         except NetlinkError as e:
-            return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
+            return srv6_manager_pb2.SRv6ManagerReply(
+                status=self.parse_netlink_error(e)
+            )
 
     def HandleIPAddrRequest(self, op, request, context):
         logging.debug('config received:\n%s', request)
@@ -555,33 +697,71 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                         # Get network prefix
                         prefix = str(addr.net) if addr.net != '' else None
                         # Interface configuration
-                        tn.write(('interface %s\r\n' % device).encode('latin-1'))
+                        tn.write(
+                            ('interface %s\r\n' % device).encode('latin-1')
+                        )
                         if family == AF_INET6:
                             if op == 'del':
                                 # Remove IPv6 address
-                                tn.write(('no ipv6 address %s\r\n' % ip).encode('latin-1'))
+                                tn.write(
+                                    (
+                                        'no ipv6 address %s\r\n' % ip
+                                    ).encode('latin-1')
+                                )
                                 if prefix is not None:
-                                    tn.write(('no ipv6 nd prefix %s\r\n' % prefix).encode('latin-1'))
+                                    tn.write(
+                                        (
+                                            'no ipv6 nd prefix %s\r\n' % prefix
+                                        ).encode('latin-1')
+                                    )
                             else:
                                 # Add IPv6 address
-                                tn.write(('ipv6 address %s\r\n' % ip).encode('latin-1'))
+                                tn.write(
+                                    (
+                                        'ipv6 address %s\r\n' % ip
+                                    ).encode('latin-1')
+                                )
                                 if prefix is not None:
-                                    tn.write(('ipv6 nd prefix %s\r\n' % prefix).encode('latin-1'))
+                                    tn.write(
+                                        (
+                                            'ipv6 nd prefix %s\r\n' % prefix
+                                        ).encode('latin-1')
+                                    )
                         elif family == AF_INET:
                             if op == 'del':
                                 # Remove IPv4 address
-                                tn.write(('no ip address %s\r\n' % ip).encode('latin-1'))
+                                tn.write(
+                                    (
+                                        'no ip address %s\r\n' % ip
+                                    ).encode('latin-1')
+                                )
                             else:
                                 # Add IPv4 address
-                                tn.write(('ip address %s\r\n' % ip).encode('latin-1'))
+                                tn.write(
+                                    (
+                                        'ip address %s\r\n' % ip
+                                    ).encode('latin-1')
+                                )
                         elif family == AF_UNSPEC:
                             if op == 'del':
                                 # Remove IPv6 address
-                                tn.write(('no ipv6 address %s\r\n' % ip).encode('latin-1'))
+                                tn.write(
+                                    (
+                                        'no ipv6 address %s\r\n' % ip
+                                    ).encode('latin-1')
+                                )
                                 if prefix is not None:
-                                    tn.write(('no ipv6 nd prefix %s\r\n' % prefix).encode('latin-1'))
+                                    tn.write(
+                                        (
+                                            'no ipv6 nd prefix %s\r\n' % prefix
+                                        ).encode('latin-1')
+                                    )
                                 # Remove IPv4 address
-                                tn.write(('no ip address %s\r\n' % ip).encode('latin-1'))
+                                tn.write(
+                                    (
+                                        'no ip address %s\r\n' % ip
+                                    ).encode('latin-1')
+                                )
                             else:
                                 raise InvalidAddressFamilyError
                         else:
@@ -597,20 +777,26 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                     # Close telnet
                     tn.close()
                     logging.debug('Send response: OK')
-                    return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+                    return srv6_manager_pb2.SRv6ManagerReply(
+                        status=status_codes_pb2.STATUS_SUCCESS
+                    )
                 except socket.error:
                     logging.debug('Send response: Unreachable zebra daemon')
-                    return (srv6_manager_pb2
-                            .SRv6ManagerReply(status=status_codes_pb2.STATUS_UNREACHABLE_ZEBRA))
+                    return srv6_manager_pb2.SRv6ManagerReply(
+                        status=status_codes_pb2.STATUS_UNREACHABLE_ZEBRA
+                    )
                 except InvalidAddressFamilyError:
                     logging.debug('Send response: Invalid address family')
-                    return (srv6_manager_pb2
-                            .SRv6ManagerReply(status=status_codes_pb2.STATUS_INVALID_ADDRESS))
+                    return srv6_manager_pb2.SRv6ManagerReply(
+                        status=status_codes_pb2.STATUS_INVALID_ADDRESS
+                    )
             else:
                 # Operation unknown: this is a bug
-                logging.error('Unrecognized operation: %s' % op)
+                logging.error('Unrecognized operation: %s', op)
         except NetlinkError as e:
-            return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
+            return srv6_manager_pb2.SRv6ManagerReply(
+                status=self.parse_netlink_error(e)
+            )
 
     def HandleVRFDeviceRequest(self, op, request, context):
         logging.debug('config received:\n%s', request)
@@ -618,8 +804,12 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
         try:
             if op == 'add' or op == 'del':
                 for device in request.devices:
-                    ip_route.link(op, ifname=device.name,
-                                  kind='vrf', vrf_table=device.table)
+                    ip_route.link(
+                        op,
+                        ifname=device.name,
+                        kind='vrf',
+                        vrf_table=device.table
+                    )
                     if op == 'add':
                         # Enable the new VRF
                         vrfindex = ip_route.link_lookup(ifname=device.name)[0]
@@ -645,10 +835,14 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                     '''
                 # and create the response
                 if op == 'add':
-                    return self.HandleVRFDeviceRequest('change', request, context)
+                    return self.HandleVRFDeviceRequest(
+                        'change', request, context
+                    )
                 else:
                     logging.debug('Send response: OK')
-                    return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+                    return srv6_manager_pb2.SRv6ManagerReply(
+                        status=status_codes_pb2.STATUS_SUCCESS
+                    )
             elif op == 'change':
                 for device in request.devices:
                     if device.op == 'add_interfaces':
@@ -657,8 +851,12 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                         # Add the remaining links to the VRF
                         for interface in device.interfaces:
                             ifindex = ip_route.link_lookup(ifname=interface)[0]
-                            ip_route.link('set', index=ifindex, master=vrfindex)
-                        return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+                            ip_route.link(
+                                'set', index=ifindex, master=vrfindex
+                            )
+                        return srv6_manager_pb2.SRv6ManagerReply(
+                            status=status_codes_pb2.STATUS_SUCCESS
+                        )
                     elif device.op == 'del_interfaces':
                         # Get the VRF index
                         vrfindex = ip_route.link_lookup(ifname=device.name)[0]
@@ -666,15 +864,25 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                         interfaces_in_vrf = set()
                         for link in ip_route.get_links():
                             if link.get_attr('IFLA_MASTER') == vrfindex:
-                                interfaces_in_vrf.add(link.get_attr('IFLA_IFNAME'))
+                                interfaces_in_vrf.add(
+                                    link.get_attr('IFLA_IFNAME')
+                                )
                         # Add the remaining links to the VRF
                         for interface in device.interfaces:
                             if interface not in interfaces_in_vrf:
-                                logging.warning('Interface does not belong to the VRF')
-                                return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_NO_SUCH_DEVICE)
+                                logging.warning(
+                                    'Interface does not belong to the VRF'
+                                )
+                                return srv6_manager_pb2.SRv6ManagerReply(
+                                    status=(
+                                        status_codes_pb2.STATUS_NO_SUCH_DEVICE
+                                    )
+                                )
                             ifindex = ip_route.link_lookup(ifname=interface)[0]
                             ip_route.link('set', index=ifindex, master=0)
-                        return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+                        return srv6_manager_pb2.SRv6ManagerReply(
+                            status=status_codes_pb2.STATUS_SUCCESS
+                        )
                     else:
                         # Get the interfaces to be added to the VRF
                         interfaces = []
@@ -687,21 +895,31 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                             if link.get_attr('IFLA_MASTER') == vrfindex:
                                 if link.get_attr('IFLA_IFNAME') in interfaces:
                                     # The link belongs to the VRF
-                                    interfaces.remove(link.get_attr('IFLA_IFNAME'))
+                                    interfaces.remove(
+                                        link.get_attr('IFLA_IFNAME')
+                                    )
                                 else:
                                     # The link has to be removed from the VRF
                                     ifindex = link.get('index')
-                                    ip_route.link('set', index=ifindex, master=0)
+                                    ip_route.link(
+                                        'set', index=ifindex, master=0
+                                    )
                         # Add the remaining links to the VRF
                         for interface in interfaces:
                             ifindex = ip_route.link_lookup(ifname=interface)[0]
-                            ip_route.link('set', index=ifindex, master=vrfindex)
-                        return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+                            ip_route.link(
+                                'set', index=ifindex, master=vrfindex
+                            )
+                        return srv6_manager_pb2.SRv6ManagerReply(
+                            status=status_codes_pb2.STATUS_SUCCESS
+                        )
             else:
                 # Operation unknown: this is a bug
-                logging.error('Unrecognized operation: %s' % op)
+                logging.error('Unrecognized operation: %s', op)
         except NetlinkError as e:
-            return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
+            return srv6_manager_pb2.SRv6ManagerReply(
+                status=self.parse_netlink_error(e)
+            )
 
     def HandleInterfaceRequest(self, op, request, context):
         logging.debug('config received:\n%s', request)
@@ -732,12 +950,20 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                     for device in request.interfaces:
                         if device.ospf_adv:
                             # Add the interface to the link state messages
-                            tn.write(('interface %s area 0.0.0.0\r\n'
-                                     % str(device.name)).encode('latin-1'))
+                            tn.write(
+                                (
+                                    'interface %s area 0.0.0.0\r\n'
+                                    % str(device.name)
+                                ).encode('latin-1')
+                            )
                         else:
                             # Remove the interface from the link state messages
-                            tn.write(('no interface %s area 0.0.0.0\r\n'
-                                     % str(device.name)).encode('latin-1'))
+                            tn.write(
+                                (
+                                    'no interface %s area 0.0.0.0\r\n'
+                                    % str(device.name)
+                                ).encode('latin-1')
+                            )
                     # Close interface configuration
                     tn.write(b'q\r\n')
                     # Close configuration mode
@@ -749,11 +975,14 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                     # Close telnet
                     tn.close()
                     logging.debug('Send response: OK')
-                    return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+                    return srv6_manager_pb2.SRv6ManagerReply(
+                        status=status_codes_pb2.STATUS_SUCCESS
+                    )
                 except socket.error:
                     logging.debug('Send response: Unreachable ospf6d daemon')
-                    return (srv6_manager_pb2
-                            .SRv6ManagerReply(status=status_codes_pb2.STATUS_UNREACHABLE_OSPF6D))
+                    return srv6_manager_pb2.SRv6ManagerReply(
+                        status=status_codes_pb2.STATUS_UNREACHABLE_OSPF6D
+                    )
             elif op == 'get':
                 # Handle get operation
                 # Get the interfaces
@@ -763,9 +992,13 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                     interfaces.append(ifindex)
                 links = dict()
                 for link in ip_route.get_links(*interfaces):
-                    if (link.get_attr('IFLA_LINKINFO') and
+                    if (
                         link.get_attr('IFLA_LINKINFO')
-                            .get_attr('IFLA_INFO_KIND') != 'vrf'):
+                        and (
+                            link.get_attr('IFLA_LINKINFO')
+                            .get_attr('IFLA_INFO_KIND') != 'vrf'
+                        )
+                    ):
                         # Skip the VRFs
                         # Get the index of the interface
                         ifindex = link.get('index')
@@ -801,7 +1034,9 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                     ipaddr = addrs[ifindex]
                     interfaces[ifname] = (macaddr, ipaddr, state, ifindex)
                 # Create the response
-                response = srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+                response = srv6_manager_pb2.SRv6ManagerReply(
+                    status=status_codes_pb2.STATUS_SUCCESS
+                )
                 for ifname in interfaces:
                     interface = response.interfaces.add()
                     interface.index = int(interfaces[ifname][3])
@@ -814,9 +1049,11 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                 return response
             else:
                 # Operation unknown: this is a bug
-                logging.error('Unrecognized operation: %s' % op)
+                logging.error('Unrecognized operation: %s', op)
         except NetlinkError as e:
-            return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
+            return srv6_manager_pb2.SRv6ManagerReply(
+                status=self.parse_netlink_error(e)
+            )
 
     def HandleIPNeighRequest(self, op, request, context):
         logging.debug('config received:\n%s', request)
@@ -836,16 +1073,27 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                         flags |= ndmsg.NTF_PROXY
                     # Create or delete the neigh
                     device = ip_route.link_lookup(ifname=device)[0]
-                    ip_route.neigh(op, family=family, dst=addr, lladdr=lladdr, ifindex=device,
-                                   flags=flags, state=ndmsg.states['permanent'])
+                    ip_route.neigh(
+                        op,
+                        family=family,
+                        dst=addr,
+                        lladdr=lladdr,
+                        ifindex=device,
+                        flags=flags,
+                        state=ndmsg.states['permanent']
+                    )
             else:
                 # Operation unknown: this is a bug
-                logging.error('Unrecognized operation: %s' % op)
+                logging.error('Unrecognized operation: %s', op)
             # and create the response
             logging.debug('Send response: OK')
-            return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+            return srv6_manager_pb2.SRv6ManagerReply(
+                status=status_codes_pb2.STATUS_SUCCESS
+            )
         except NetlinkError as e:
-            return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
+            return srv6_manager_pb2.SRv6ManagerReply(
+                status=self.parse_netlink_error(e)
+            )
 
     def HandleGREInterfaceRequest(self, op, request, context):
         logging.debug('config received:\n%s', request)
@@ -865,28 +1113,44 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                     key = key if key != -1 else None
                     if type == gre_interface_pb2.IP6GRE:
                         # Create or delete the gre interface
-                        ip_route.link(op, ifname=name, kind='ip6gre',
-                                    ip6gre_local=local, ip6gre_remote=remote,
-                                    ip6gre_key=key)
+                        ip_route.link(
+                            op,
+                            ifname=name,
+                            kind='ip6gre',
+                            ip6gre_local=local,
+                            ip6gre_remote=remote,
+                            ip6gre_key=key
+                        )
                     if type == gre_interface_pb2.GRE:
                         # Create or delete the gre interface
-                        ip_route.link(op, ifname=name, kind='gre',
-                                      gre_local=local, gre_remote=remote,
-                                      gre_key=key)
+                        ip_route.link(
+                            op,
+                            ifname=name,
+                            kind='gre',
+                            gre_local=local,
+                            gre_remote=remote,
+                            gre_key=key
+                        )
                     else:
-                        logging.warning('Unrecognized GRE type: %s' % type)
-                        return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_INTERNAL_ERROR)
+                        logging.warning('Unrecognized GRE type: %s', type)
+                        return srv6_manager_pb2.SRv6ManagerReply(
+                            status=status_codes_pb2.STATUS_INTERNAL_ERROR
+                        )
                     # Enable the new GRE interface
                     greindex = ip_route.link_lookup(ifname=name)[0]
                     ip_route.link('set', index=greindex, state='up')
             else:
                 # Operation unknown: this is a bug
-                logging.error('Unrecognized operation: %s' % op)
+                logging.error('Unrecognized operation: %s', op)
             # and create the response
             logging.debug('Send response: OK')
-            return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+            return srv6_manager_pb2.SRv6ManagerReply(
+                status=status_codes_pb2.STATUS_SUCCESS
+            )
         except NetlinkError as e:
-            return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
+            return srv6_manager_pb2.SRv6ManagerReply(
+                status=self.parse_netlink_error(e)
+            )
 
     def HandleIPVxLANRequest(self, op, request, context):
         logging.debug("config received:\n%s", request)
@@ -904,41 +1168,57 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
             if op == 'add':
                 # Create VTEP
                 if getAddressFamily(vxlan_group) == AF_INET:
-                    ip_route.link(op,
-                                ifname=ifname,
-                                kind="vxlan",
-                                vxlan_link=ip_route.link_lookup(ifname=vxlan_link)[0],
-                                vxlan_id=vxlan_id,
-                                vxlan_port=vxlan_port,
-                                vxlan_port_range={'low': vxlan_port, 'high': vxlan_port+1},
-                                vxlan_group=vxlan_group)
+                    ip_route.link(
+                        op,
+                        ifname=ifname,
+                        kind="vxlan",
+                        vxlan_link=ip_route.link_lookup(ifname=vxlan_link)[0],
+                        vxlan_id=vxlan_id,
+                        vxlan_port=vxlan_port,
+                        vxlan_port_range={
+                            'low': vxlan_port,
+                            'high': vxlan_port+1
+                        },
+                        vxlan_group=vxlan_group
+                    )
                 elif getAddressFamily(vxlan_group) == AF_INET6:
-                    ip_route.link(op,
-                                ifname=ifname,
-                                kind="vxlan",
-                                vxlan_link=ip_route.link_lookup(ifname=vxlan_link)[0],
-                                vxlan_id=vxlan_id,
-                                vxlan_port=vxlan_port,
-                                vxlan_port_range={'low': vxlan_port, 'high': vxlan_port+1},
-                                vxlan_group6=vxlan_group)
+                    ip_route.link(
+                        op,
+                        ifname=ifname,
+                        kind="vxlan",
+                        vxlan_link=ip_route.link_lookup(ifname=vxlan_link)[0],
+                        vxlan_id=vxlan_id,
+                        vxlan_port=vxlan_port,
+                        vxlan_port_range={
+                            'low': vxlan_port,
+                            'high': vxlan_port+1
+                        },
+                        vxlan_group6=vxlan_group
+                    )
                 else:
-                    return (srv6_manager_pb2
-                            .SRv6ManagerReply(status=status_codes_pb2.STATUS_INVALID_ADDRESS))
-                # Set UP VTEP             
-                ip_route.link('set', 
-                              index=ip_route.link_lookup(ifname=ifname)[0], 
-                              state='up')
+                    return srv6_manager_pb2.SRv6ManagerReply(
+                        status=status_codes_pb2.STATUS_INVALID_ADDRESS
+                    )
+                # Set UP VTEP
+                ip_route.link(
+                    'set', 
+                    index=ip_route.link_lookup(ifname=ifname)[0], 
+                    state='up'
+                )
             # Delete VTEP interface 
             elif op == 'del':
-                ip_route.link("del", 
-                        index=ip_route.link_lookup(ifname=ifname)[0])
-
+                ip_route.link(
+                    'del', 
+                    index=ip_route.link_lookup(ifname=ifname)[0]
+                )
             else:
                 # Operation unknown: this is a bug
                 print('Unrecognized operation')
                 exit(-1)
         # and create the response
-        return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+        return srv6_manager_pb2.SRv6ManagerReply(
+            status=status_codes_pb2.STATUS_SUCCESS
+        )
 
     def HandleIPfdbentriesRequest(self, op, request, context):
         logging.debug("config received:\n%s", request)
@@ -949,23 +1229,28 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
             dst = fdbentries.dst
             # Let's push the fdb append command 
             if op == 'add':
-                ip_route.fdb('append',
-                              ifindex=ip_route.link_lookup(ifname=ifindex)[0],
-                              lladdr='00:00:00:00:00:00',
-                              dst=dst)
+                ip_route.fdb(
+                    'append',
+                    ifindex=ip_route.link_lookup(ifname=ifindex)[0],
+                    lladdr='00:00:00:00:00:00',
+                    dst=dst
+                )
 
             elif op == 'del':
-                ip_route.fdb('del',
-                              ifindex=ip_route.link_lookup(ifname=ifindex)[0],
-                              lladdr='00:00:00:00:00:00',
-                              dst=dst)
-
+                ip_route.fdb(
+                    'del',
+                    ifindex=ip_route.link_lookup(ifname=ifindex)[0],
+                    lladdr='00:00:00:00:00:00',
+                    dst=dst
+                )
             else:
                 # Operation unknown: this is a bug
                 print('Unrecognized operation')
                 exit(-1)
         # and create the response
-        return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+        return srv6_manager_pb2.SRv6ManagerReply(
+            status=status_codes_pb2.STATUS_SUCCESS
+        )
 
     def HandleIPTunnelRequest(self, op, request, context):
         logging.debug('config received:\n%s', request)
@@ -974,33 +1259,49 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
             for ip_tunnel in request.ip_tunnels:
                 if op == 'add':
                     # Extract the tunnel type
-                    if ip_tunnel.tunnel_type == ip_tunnel_interface_pb2.IPTunnelType.IP4IP4:
-                        ip_route.link(op, ifname=ip_tunnel.ifname,
-                                        kind='sit',
-                                        ip6tnl_local=ip_tunnel.local_addr,
-                                        ip6tnl_remote=ip_tunnel.remote_addr,
-                                        ip6tnl_mode='ipip')
-                    elif ip_tunnel.tunnel_type == ip_tunnel_interface_pb2.IPTunnelType.IP4IP6:
-                        ip_route.link(op, ifname=ip_tunnel.ifname,
-                                        kind='ip6tnl',
-                                        ip6tnl_local=ip_tunnel.local_addr,
-                                        ip6tnl_remote=ip_tunnel.remote_addr,
-                                        ip6tnl_mode='ipip6')
-                    elif ip_tunnel.tunnel_type == ip_tunnel_interface_pb2.IPTunnelType.IP6IP4:
-                        ip_route.link(op, ifname=ip_tunnel.ifname,
-                                        kind='sit',
-                                        ip6tnl_local=ip_tunnel.local_addr,
-                                        ip6tnl_remote=ip_tunnel.remote_addr,
-                                        ip6tnl_mode='ip6ip')
-                    elif ip_tunnel.tunnel_type == ip_tunnel_interface_pb2.IPTunnelType.IP6IP6:
-                        ip_route.link(op, ifname=ip_tunnel.ifname,
-                                        kind='ip6tnl',
-                                        ip6tnl_local=ip_tunnel.local_addr,
-                                        ip6tnl_remote=ip_tunnel.remote_addr,
-                                        ip6tnl_mode='ip6ip6')
+                    if ip_tunnel.tunnel_type == IPTunnelType.IP4IP4:
+                        ip_route.link(
+                            op,
+                            ifname=ip_tunnel.ifname,
+                            kind='sit',
+                            ip6tnl_local=ip_tunnel.local_addr,
+                            ip6tnl_remote=ip_tunnel.remote_addr,
+                            ip6tnl_mode='ipip'
+                        )
+                    elif ip_tunnel.tunnel_type == IPTunnelType.IP4IP6:
+                        ip_route.link(
+                            op,
+                            ifname=ip_tunnel.ifname,
+                            kind='ip6tnl',
+                            ip6tnl_local=ip_tunnel.local_addr,
+                            ip6tnl_remote=ip_tunnel.remote_addr,
+                            ip6tnl_mode='ipip6'
+                        )
+                    elif ip_tunnel.tunnel_type == IPTunnelType.IP6IP4:
+                        ip_route.link(
+                            op,
+                            ifname=ip_tunnel.ifname,
+                            kind='sit',
+                            ip6tnl_local=ip_tunnel.local_addr,
+                            ip6tnl_remote=ip_tunnel.remote_addr,
+                            ip6tnl_mode='ip6ip'
+                        )
+                    elif ip_tunnel.tunnel_type == IPTunnelType.IP6IP6:
+                        ip_route.link(
+                            op,
+                            ifname=ip_tunnel.ifname,
+                            kind='ip6tnl',
+                            ip6tnl_local=ip_tunnel.local_addr,
+                            ip6tnl_remote=ip_tunnel.remote_addr,
+                            ip6tnl_mode='ip6ip6'
+                        )
                     else:
-                        logging.error('Invalid tunnel type: %s', ip_tunnel.tunnel_type)
-                        return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_INTERNAL_ERROR)
+                        logging.error(
+                            'Invalid tunnel type: %s', ip_tunnel.tunnel_type
+                        )
+                        return srv6_manager_pb2.SRv6ManagerReply(
+                            status=status_codes_pb2.STATUS_INTERNAL_ERROR
+                        )
                     # Enable the new interface
                     ifindex = ip_route.link_lookup(ifname=ip_tunnel.ifname)[0]
                     ip_route.link('set', index=ifindex, state='up')
@@ -1008,11 +1309,15 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                     ip_route.link(op, ifname=ip_tunnel.ifname)
                 else:
                     # Operation unknown: this is a bug
-                    logging.error('Unrecognized operation: %s' % op)
+                    logging.error('Unrecognized operation: %s', op)
             logging.debug('Send response: OK')
-            return srv6_manager_pb2.SRv6ManagerReply(status=status_codes_pb2.STATUS_SUCCESS)
+            return srv6_manager_pb2.SRv6ManagerReply(
+                status=status_codes_pb2.STATUS_SUCCESS
+            )
         except NetlinkError as e:
-            return srv6_manager_pb2.SRv6ManagerReply(status=self.parse_netlink_error(e))
+            return srv6_manager_pb2.SRv6ManagerReply(
+                status=self.parse_netlink_error(e)
+            )
 
     def Execute(self, op, request, context):
         entity_type = request.entity_type
@@ -1024,8 +1329,9 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
             return self.HandleSRv6ExplicitPathRequest(op, request, context)
         elif entity_type == srv6_manager_pb2.SRv6LocalProcessingFunction:
             request = request.srv6_lpf_request
-            return (self.HandleSRv6LocalProcessingFunctionRequest(op, request,
-                                                                  context))
+            return self.HandleSRv6LocalProcessingFunctionRequest(
+                op, request, context
+            )
         elif entity_type == srv6_manager_pb2.IPAddr:
             request = request.ipaddr_request
             if USE_ZEBRA:
@@ -1060,8 +1366,9 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
             request = request.iptunnel_request
             return self.HandleIPTunnelRequest(op, request, context)    
         else:
-            return (srv6_manager_pb2
-                    .SRv6ManagerReply(status=status_codes_pb2.STATUS_INVALID_GRPC_REQUEST))
+            return srv6_manager_pb2.SRv6ManagerReply(
+                status=status_codes_pb2.STATUS_INVALID_GRPC_REQUEST
+            )
 
     def Create(self, request, context):
         # Handle Create operation
@@ -1080,8 +1387,9 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
         return self.Execute('del', request, context)
 
 
-class NetworkEventsListener(network_events_listener_pb2_grpc
-                            .NetworkEventsListenerServicer):
+class NetworkEventsListener(
+    network_events_listener_pb2_grpc.NetworkEventsListenerServicer
+):
 
     def Listen(self, request, context):
         logging.debug('config received:\n%s', request)
@@ -1104,9 +1412,13 @@ class NetworkEventsListener(network_events_listener_pb2_grpc
                 ipaddr = None
                 prefixlen = None
                 state = None
-                if (msg.get_attr('IFLA_LINKINFO') is not None and
-                    msg.get_attr('IFLA_LINKINFO')
-                        .get_attr('IFLA_INFO_KIND') == 'vrf'):
+                if (
+                    msg.get_attr('IFLA_LINKINFO') is not None
+                    and (
+                        msg.get_attr('IFLA_LINKINFO')
+                        .get_attr('IFLA_INFO_KIND') == 'vrf'
+                    )
+                ):
                     # Skip VRF devices
                     continue
                 # Convert the message to a dictionary representation
@@ -1182,22 +1494,24 @@ class NetworkEventsListener(network_events_listener_pb2_grpc
                     response.interface.ipaddr = '%s/%s' % (ipaddr, prefixlen)
                 response.type = EVENT_TYPES[type]
                 # and send the response to the client
-                logging.debug('Send response:\n%s' % response)
+                logging.debug('Send response:\n%s', response)
                 yield response
         logging.info('Exiting from Listen()')
 
 
 # Start gRPC server
-def start_server(grpc_ip=DEFAULT_GRPC_IP,
-                 grpc_port=DEFAULT_GRPC_PORT,
-                 quagga_password=DEFAULT_QUAGGA_PASSWORD,
-                 zebra_port=DEFAULT_ZEBRA_PORT,
-                 ospf6d_port=DEFAULT_OSPF6D_PORT,
-                 secure=DEFAULT_SECURE,
-                 certificate=DEFAULT_CERTIFICATE,
-                 key=DEFAULT_KEY,
-                 stop_event=None,
-                 reboot_required=None):
+def start_server(
+    grpc_ip=DEFAULT_GRPC_IP,
+    grpc_port=DEFAULT_GRPC_PORT,
+    quagga_password=DEFAULT_QUAGGA_PASSWORD,
+    zebra_port=DEFAULT_ZEBRA_PORT,
+    ospf6d_port=DEFAULT_OSPF6D_PORT,
+    secure=DEFAULT_SECURE,
+    certificate=DEFAULT_CERTIFICATE,
+    key=DEFAULT_KEY,
+    stop_event=None,
+    reboot_required=None
+):
     # Configure gRPC server listener and ip route
     global grpc_server, ip_route, ipdb
     # Setup gRPC server
@@ -1210,15 +1524,22 @@ def start_server(grpc_ip=DEFAULT_GRPC_IP,
         if ENABLE_STAMP_SUPPORT:
             stamp_sender_module.run_grpc_server(server=grpc_server)
             stamp_reflector_module.run_grpc_server(server=grpc_server)
-        (srv6_manager_pb2_grpc
-         .add_SRv6ManagerServicer_to_server(
-             SRv6Manager(quagga_password, zebra_port, ospf6d_port, stop_event,
-                         reboot_required),
-             grpc_server)
+        srv6_manager_pb2_grpc.add_SRv6ManagerServicer_to_server(
+            SRv6Manager(
+                quagga_password,
+                zebra_port,
+                ospf6d_port,
+                stop_event,
+                reboot_required
+            ),
+            grpc_server
         )
-        (network_events_listener_pb2_grpc
-         .add_NetworkEventsListenerServicer_to_server(NetworkEventsListener(),
-                                                      grpc_server))
+        (
+            network_events_listener_pb2_grpc
+            .add_NetworkEventsListenerServicer_to_server(
+                NetworkEventsListener(), grpc_server
+            )
+        )
         # If secure we need to create a secure endpoint
         if secure:
             # Read key and certificate
@@ -1227,12 +1548,13 @@ def start_server(grpc_ip=DEFAULT_GRPC_IP,
             with open(certificate, 'rb') as f:
                 certificate = f.read()
             # Create server ssl credentials
-            grpc_server_credentials = (grpc
-                                       .ssl_server_credentials(((key,
-                                                               certificate),)))
+            grpc_server_credentials = (
+                grpc.ssl_server_credentials(((key, certificate),))
+            )
             # Create a secure endpoint
-            grpc_server.add_secure_port('[%s]:%s' % (grpc_ip, grpc_port),
-                                        grpc_server_credentials)
+            grpc_server.add_secure_port(
+                '[%s]:%s' % (grpc_ip, grpc_port), grpc_server_credentials
+            )
         else:
             # Create an insecure endpoint
             grpc_server.add_insecure_port('[%s]:%s' % (grpc_ip, grpc_port))
@@ -1259,7 +1581,7 @@ def start_server(grpc_ip=DEFAULT_GRPC_IP,
     logging.info('*** Terminating gRPC server')
     grpc_server.stop(10).wait()
     logging.info('*** Server terminated')
-    #while True:
+    # while True:
     #    time.sleep(5)
 
 
@@ -1276,33 +1598,59 @@ def parse_arguments():
         '-s', '--secure', action='store_true', help='Activate secure mode'
     )
     parser.add_argument(
-        '-o', '--ospf6d-port', dest='ospf6d_port', action='store',
+        '-o',
+        '--ospf6d-port',
+        dest='ospf6d_port',
+        action='store',
         default=DEFAULT_OSPF6D_PORT,
         help='The port that the ospf6d VTY is listening on'
     )
     parser.add_argument(
-        '-z', '--zebra-port', dest='zebra_port', action='store', default=DEFAULT_ZEBRA_PORT,
+        '-z',
+        '--zebra-port',
+        dest='zebra_port',
+        action='store',
+        default=DEFAULT_ZEBRA_PORT,
         help='The port that the zebra VTY is listening on'
     )
     parser.add_argument(
-        '-p', '--quagga-pwd', dest='quagga_pwd', action='store',
+        '-p',
+        '--quagga-pwd',
+        dest='quagga_pwd',
+        action='store',
         default=DEFAULT_QUAGGA_PASSWORD,
         help='Password of zebra/ospf6d quagga daemons'
     )
     parser.add_argument(
-        '-g', '--grpc-ip', dest='grpc_ip', action='store', default=DEFAULT_GRPC_IP,
+        '-g',
+        '--grpc-ip',
+        dest='grpc_ip',
+        action='store',
+        default=DEFAULT_GRPC_IP,
         help='IP of the gRPC server'
     )
     parser.add_argument(
-        '-r', '--grpc-port', dest='grpc_port', action='store', default=DEFAULT_GRPC_PORT,
+        '-r',
+        '--grpc-port',
+        dest='grpc_port',
+        action='store',
+        default=DEFAULT_GRPC_PORT,
         help='Port of the gRPC server'
     )
     parser.add_argument(
-        '-c', '--server-cert', dest='server_cert', action='store',
-        default=DEFAULT_CERTIFICATE, help='Server certificate file'
+        '-c',
+        '--server-cert',
+        dest='server_cert',
+        action='store',
+        default=DEFAULT_CERTIFICATE,
+        help='Server certificate file'
     )
     parser.add_argument(
-        '-k', '--server-key', dest='server_key', action='store', default=DEFAULT_KEY,
+        '-k',
+        '--server-key',
+        dest='server_key',
+        action='store',
+        default=DEFAULT_KEY,
         help='Server key file'
     )
     # Parse input parameters
@@ -1343,5 +1691,13 @@ if __name__ == '__main__':
     server_debug = logger.getEffectiveLevel() == logging.DEBUG
     logging.info('SERVER_DEBUG:' + str(server_debug))
     # Start the server
-    start_server(grpc_ip, grpc_port, quagga_password, zebra_port,
-                 ospf6d_port, secure, certificate, key)
+    start_server(
+        grpc_ip,
+        grpc_port,
+        quagga_password,
+        zebra_port,
+        ospf6d_port,
+        secure,
+        certificate,
+        key
+    )
