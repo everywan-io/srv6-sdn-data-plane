@@ -4,24 +4,18 @@
 from __future__ import absolute_import, division, print_function
 
 # General imports
-from six import text_type
 from argparse import ArgumentParser
 import socket
 import logging
-import time
 import grpc
-import threading
 import telnetlib
 import sys
-import os
 from concurrent import futures
-from optparse import OptionParser
 from pyroute2 import IPRoute
 from pyroute2 import IPDB
 from socket import AF_INET
 from socket import AF_INET6
 from socket import AF_UNSPEC
-from queue import Queue
 from pyroute2.netlink.exceptions import NetlinkError
 from pyroute2.netlink.rtnl import ndmsg
 
