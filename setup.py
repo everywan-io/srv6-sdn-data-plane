@@ -1,5 +1,5 @@
 # Always prefer setuptools over distutils
-from setuptools import setup, find_packages
+from setuptools import setup
 # To use a consistent encoding
 from codecs import open
 from os import path
@@ -17,7 +17,7 @@ with open(path.join(here, 'VERSION')) as version_file:
 # Arguments marked as "Required" below must be included for upload to PyPI.
 # Fields marked as "Optional" may be commented out.
 setup(
-    name='srv6-sdn-data-plane',  
+    name='srv6-sdn-data-plane',
     version=version,
     description='SRv6 SDN Data Plane',  # Required
     long_description=long_description,
