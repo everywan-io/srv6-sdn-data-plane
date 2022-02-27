@@ -77,10 +77,10 @@ DEFAULT_QUAGGA_PASSWORD = 'srv6'
 # RT_SCOPES represents the scope of the area where an address is valid
 # The scopes available are defined in /etc/iproute2/RT_SCOPES
 RT_SCOPES = {
-  'global': 0,
-  'nowhere': 255,
-  'host': 254,
-  'link': 253
+    'global': 0,
+    'nowhere': 255,
+    'host': 254,
+    'link': 253
 }
 
 EVENT_TYPES = {
@@ -1164,7 +1164,7 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
             vxlan_group = None
             if vxlan_group != '':
                 vxlan_group = vxlan.vxlan_group
-            # Let's push the vxlan command 
+            # Let's push the vxlan command
             if op == 'add':
                 # Create VTEP
                 if getAddressFamily(vxlan_group) == AF_INET:
@@ -1201,14 +1201,14 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                     )
                 # Set UP VTEP
                 ip_route.link(
-                    'set', 
-                    index=ip_route.link_lookup(ifname=ifname)[0], 
+                    'set',
+                    index=ip_route.link_lookup(ifname=ifname)[0],
                     state='up'
                 )
-            # Delete VTEP interface 
+            # Delete VTEP interface
             elif op == 'del':
                 ip_route.link(
-                    'del', 
+                    'del',
                     index=ip_route.link_lookup(ifname=ifname)[0]
                 )
             else:
@@ -1227,7 +1227,7 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
             # Extract params from the request
             ifindex = fdbentries.ifindex
             dst = fdbentries.dst
-            # Let's push the fdb append command 
+            # Let's push the fdb append command
             if op == 'add':
                 ip_route.fdb(
                     'append',
@@ -1361,10 +1361,10 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
             return self.HandleIPVxLANRequest(op, request, context)
         elif entity_type == srv6_manager_pb2.IPfdbentries:
             request = request.fdbentries_request
-            return self.HandleIPfdbentriesRequest(op, request, context)  
+            return self.HandleIPfdbentriesRequest(op, request, context)
         elif entity_type == srv6_manager_pb2.IPTunnel:
             request = request.iptunnel_request
-            return self.HandleIPTunnelRequest(op, request, context)    
+            return self.HandleIPTunnelRequest(op, request, context)
         else:
             return srv6_manager_pb2.SRv6ManagerReply(
                 status=status_codes_pb2.STATUS_INVALID_GRPC_REQUEST
