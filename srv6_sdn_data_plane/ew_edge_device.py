@@ -4,23 +4,13 @@ from __future__ import print_function
 
 # General imports
 import configparser
-import time
 import os
 import signal
-import sys
-import json
 import threading
 import logging
-from filelock import FileLock
 from functools import partial
 from argparse import ArgumentParser
 from threading import Thread
-from threading import Lock
-# ipaddress dependencies
-from ipaddress import IPv6Interface, IPv4Address
-# NetworkX dependencies
-import networkx as nx
-from networkx.readwrite import json_graph
 # SRv6 dependencies
 from srv6_sdn_data_plane.southbound.grpc import sb_grpc_server
 # pymerang dependencies
@@ -84,32 +74,36 @@ DEFAULT_OUTGOING_SR_TRANSPARENCY = SUPPORTED_SR_TRANSPARENCY[0]
 
 class EWEdgeDevice(object):
 
-    def __init__(self, sb_interface=DEFAULT_SB_INTERFACE,
-                 secure=DEFAULT_SECURE,
-                 key=DEFAULT_KEY, certificate=DEFAULT_CERTIFICATE,
-                 grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
-                 grpc_server_port=DEFAULT_GRPC_SERVER_PORT,
-                 quagga_password=DEFAULT_QUAGGA_PASSWORD,
-                 ospf6d_port=DEFAULT_OSPF6D_PORT,
-                 zebra_port=DEFAULT_ZEBRA_PORT,
-                 pymerang_server_ip=DEFAULT_PYMERANG_SERVER_IP,
-                 pymerang_server_port=DEFAULT_PYMERANG_SERVER_PORT,
-                 nat_discovery_server_ip=DEFAULT_NAT_DISCOVERY_SERVER_IP,
-                 nat_discovery_server_port=DEFAULT_NAT_DISCOVERY_SERVER_PORT,
-                 nat_discovery_client_ip=DEFAULT_NAT_DISCOVERY_CLIENT_IP,
-                 nat_discovery_client_port=DEFAULT_NAT_DISCOVERY_CLIENT_PORT,
-                 config_file=DEFAULT_CONFIG_FILE,
-                 token_file=DEFAULT_TOKEN_FILE,
-                 keep_alive_interval=DEFAULT_KEEP_ALIVE_INTERVAL,
-                 sid_prefix=None,
-                 public_prefix_length=None,
-                 enable_proxy_ndp=False,
-                 force_ip6tnl=False,
-                 force_srh=False,
-                 incoming_sr_transparency=DEFAULT_INCOMING_SR_TRANSPARENCY,
-                 outgoing_sr_transparency=DEFAULT_OUTGOING_SR_TRANSPARENCY,
-                 allow_reboot=False,
-                 verbose=DEFAULT_VERBOSE):
+    def __init__(
+        self,
+        sb_interface=DEFAULT_SB_INTERFACE,
+        secure=DEFAULT_SECURE,
+        key=DEFAULT_KEY,
+        certificate=DEFAULT_CERTIFICATE,
+        grpc_server_ip=DEFAULT_GRPC_SERVER_IP,
+        grpc_server_port=DEFAULT_GRPC_SERVER_PORT,
+        quagga_password=DEFAULT_QUAGGA_PASSWORD,
+        ospf6d_port=DEFAULT_OSPF6D_PORT,
+        zebra_port=DEFAULT_ZEBRA_PORT,
+        pymerang_server_ip=DEFAULT_PYMERANG_SERVER_IP,
+        pymerang_server_port=DEFAULT_PYMERANG_SERVER_PORT,
+        nat_discovery_server_ip=DEFAULT_NAT_DISCOVERY_SERVER_IP,
+        nat_discovery_server_port=DEFAULT_NAT_DISCOVERY_SERVER_PORT,
+        nat_discovery_client_ip=DEFAULT_NAT_DISCOVERY_CLIENT_IP,
+        nat_discovery_client_port=DEFAULT_NAT_DISCOVERY_CLIENT_PORT,
+        config_file=DEFAULT_CONFIG_FILE,
+        token_file=DEFAULT_TOKEN_FILE,
+        keep_alive_interval=DEFAULT_KEEP_ALIVE_INTERVAL,
+        sid_prefix=None,
+        public_prefix_length=None,
+        enable_proxy_ndp=False,
+        force_ip6tnl=False,
+        force_srh=False,
+        incoming_sr_transparency=DEFAULT_INCOMING_SR_TRANSPARENCY,
+        outgoing_sr_transparency=DEFAULT_OUTGOING_SR_TRANSPARENCY,
+        allow_reboot=False,
+        verbose=DEFAULT_VERBOSE
+    ):
         # Verbose mode
         self.VERBOSE = verbose
         if self.VERBOSE:
@@ -213,8 +207,11 @@ class EWEdgeDevice(object):
             print()
 
     # Start registration client
-    def start_registration_client(self, stop_event=None,
-                                  reboot_required=None):
+    def start_registration_client(
+        self,
+        stop_event=None,
+        reboot_required=None
+    ):
         logging.info('*** Starting registration client')
         registration_client = PymerangDevice(
             server_ip=self.pymerang_server_ip,
@@ -236,7 +233,8 @@ class EWEdgeDevice(object):
             allow_reboot=self.allow_reboot,
             stop_event=stop_event,
             reboot_required=reboot_required,
-            debug=self.VERBOSE)
+            debug=self.VERBOSE
+        )
         # Run registration client
         registration_client.run()
 
@@ -260,8 +258,14 @@ class EWEdgeDevice(object):
         reboot_required = threading.Event()
         # Register handler to gracefully exit when CTRL+C is pressed
         if stop_event is not None:
-            signal.signal(signal.SIGINT, partial(self.gracefully_exit, stop_event))
-            signal.signal(signal.SIGTERM, partial(self.gracefully_exit, stop_event))
+            signal.signal(
+                signal.SIGINT,
+                partial(self.gracefully_exit, stop_event)
+            )
+            signal.signal(
+                signal.SIGTERM,
+                partial(self.gracefully_exit, stop_event)
+            )
         # Initialize the EveryEdge device
         self.init_ew_edge_device()
         # Start registration server
@@ -296,140 +300,247 @@ def parseArguments():
     # Get parser
     parser = ArgumentParser(description='EveryWAN Edge Device')
     # Enable debug logs
-    parser.add_argument('-d', '--debug', action='store_true',
-                        help='Activate debug logs')
+    parser.add_argument(
+        '-d',
+        '--debug',
+        action='store_true',
+        help='Activate debug logs'
+    )
     # Verbose mode
-    parser.add_argument('-v', '--verbose', action='store_true',
-                        dest='verbose', default=False,
-                        help='Enable verbose mode')
+    parser.add_argument(
+        '-v',
+        '--verbose',
+        action='store_true',
+        dest='verbose',
+        default=False,
+        help='Enable verbose mode'
+    )
     # Southbound interface
-    parser.add_argument('--sb-interface', action='store',
-                        dest='sb_interface', default=DEFAULT_SB_INTERFACE,
-                        help='Select a southbound interface '
-                        'from this list: %s' % SUPPORTED_SB_INTERFACES)
+    parser.add_argument(
+        '--sb-interface',
+        action='store',
+        dest='sb_interface',
+        default=DEFAULT_SB_INTERFACE,
+        help=(
+            'Select a southbound interface from this list: %s'
+            % SUPPORTED_SB_INTERFACES
+        )
+    )
     # IP address of the southbound gRPC server
-    parser.add_argument('--grpc-server-ip', dest='grpc_server_ip',
-                        action='store', default=DEFAULT_GRPC_SERVER_IP,
-                        help='IP of the southbound gRPC server')
+    parser.add_argument(
+        '--grpc-server-ip',
+        dest='grpc_server_ip',
+        action='store',
+        default=DEFAULT_GRPC_SERVER_IP,
+        help='IP of the southbound gRPC server'
+    )
     # Port of the southbound gRPC server
-    parser.add_argument('--grpc-server-port', dest='grpc_server_port',
-                        action='store', default=DEFAULT_GRPC_SERVER_PORT,
-                        help='Port of the southbound gRPC server')
+    parser.add_argument(
+        '--grpc-server-port',
+        dest='grpc_server_port',
+        action='store',
+        default=DEFAULT_GRPC_SERVER_PORT,
+        help='Port of the southbound gRPC server'
+    )
     # Enable secure mode
-    parser.add_argument('-s', '--secure', action='store_true',
-                        default=DEFAULT_SECURE, help='Activate secure mode')
+    parser.add_argument(
+        '-s',
+        '--secure',
+        action='store_true',
+        default=DEFAULT_SECURE,
+        help='Activate secure mode'
+    )
     # Server certificate
-    parser.add_argument('--server-cert', dest='server_cert',
-                        action='store', default=DEFAULT_CERTIFICATE,
-                        help='Server certificate file')
+    parser.add_argument(
+        '--server-cert',
+        dest='server_cert',
+        action='store',
+        default=DEFAULT_CERTIFICATE,
+        help='Server certificate file'
+    )
     # Server key
-    parser.add_argument('--server-key', dest='server_key',
-                        action='store', default=DEFAULT_KEY,
-                        help='Server key file')
+    parser.add_argument(
+        '--server-key',
+        dest='server_key',
+        action='store',
+        default=DEFAULT_KEY,
+        help='Server key file'
+    )
     # Password used to log in to ospf6d and zebra daemons
-    parser.add_argument('--quagga-password', action='store',
-                        dest='quagga_password', default=DEFAULT_QUAGGA_PASSWORD,
-                        help='Password used to log in to ospf6d and zebra daemons')
+    parser.add_argument(
+        '--quagga-password',
+        action='store',
+        dest='quagga_password',
+        default=DEFAULT_QUAGGA_PASSWORD,
+        help='Password used to log in to ospf6d and zebra daemons'
+    )
     # Port used to log in to zebra daemon
-    parser.add_argument('--zebra-port', action='store',
-                        dest='zebra_port', default=DEFAULT_ZEBRA_PORT,
-                        help='Port used to log in to zebra daemon')
+    parser.add_argument(
+        '--zebra-port',
+        action='store',
+        dest='zebra_port',
+        default=DEFAULT_ZEBRA_PORT,
+        help='Port used to log in to zebra daemon'
+    )
     # Port used to log in to ospf6d daemon
-    parser.add_argument('--ospf6d-port', action='store',
-                        dest='ospf6d_port', default=DEFAULT_OSPF6D_PORT,
-                        help='Port used to log in to ospf6d daemon')
+    parser.add_argument(
+        '--ospf6d-port',
+        action='store',
+        dest='ospf6d_port',
+        default=DEFAULT_OSPF6D_PORT,
+        help='Port used to log in to ospf6d daemon'
+    )
     # IP address of the gRPC registration server
     parser.add_argument(
-        '-i', '--pymerang-server-ip', dest='pymerang_server_ip',
-        default=DEFAULT_PYMERANG_SERVER_IP, help='Pymerang server IP address'
+        '-i',
+        '--pymerang-server-ip',
+        dest='pymerang_server_ip',
+        default=DEFAULT_PYMERANG_SERVER_IP,
+        help='Pymerang server IP address'
     )
     # Port of the gRPC server
     parser.add_argument(
-        '-p', '--pymerang-server-port', dest='pymerang_server_port',
-        default=DEFAULT_PYMERANG_SERVER_PORT, help='Pymerang server port'
+        '-p',
+        '--pymerang-server-port',
+        dest='pymerang_server_port',
+        default=DEFAULT_PYMERANG_SERVER_PORT,
+        help='Pymerang server port'
     )
     # IP address of the NAT discovery server
     parser.add_argument(
-        '-n', '--nat-discovery-server-ip', dest='nat_discovery_server_ip',
-        default=DEFAULT_NAT_DISCOVERY_SERVER_IP, help='NAT discovery server IP'
+        '-n',
+        '--nat-discovery-server-ip',
+        dest='nat_discovery_server_ip',
+        default=DEFAULT_NAT_DISCOVERY_SERVER_IP,
+        help='NAT discovery server IP'
     )
     # Port of the NAT discovery server
     parser.add_argument(
-        '-m', '--nat-discovery-server-port', type=int,
+        '-m',
+        '--nat-discovery-server-port',
+        type=int,
         dest='nat_discovery_server_port',
         default=DEFAULT_NAT_DISCOVERY_SERVER_PORT,
         help='NAT discovery server port'
     )
     # IP address used by the NAT discoery client
     parser.add_argument(
-        '-l', '--nat-discovery-client-ip', dest='nat_discovery_client_ip',
-        default=DEFAULT_NAT_DISCOVERY_CLIENT_IP, help='NAT discovery client IP'
+        '-l',
+        '--nat-discovery-client-ip',
+        dest='nat_discovery_client_ip',
+        default=DEFAULT_NAT_DISCOVERY_CLIENT_IP,
+        help='NAT discovery client IP'
     )
     # Port used by the NAT discovery client
     parser.add_argument(
-        '-o', '--nat-discovery-client-port', type=int,
+        '-o',
+        '--nat-discovery-client-port',
+        type=int,
         dest='nat_discovery_client_port',
         default=DEFAULT_NAT_DISCOVERY_CLIENT_PORT,
         help='NAT discovery client port'
     )
     # File containing the configuration of the device
     parser.add_argument(
-        '-f', '--device-config-file', dest='device_config_file',
+        '-f',
+        '--device-config-file',
+        dest='device_config_file',
         default=DEFAULT_CONFIG_FILE,
         help='Config file contining the configuration of the device'
     )
     # Interval between two consecutive keep alive messages
     parser.add_argument(
-        '-k', '--keep-alive-interval', dest='keep_alive_interval',
-        default=DEFAULT_KEEP_ALIVE_INTERVAL, type=int,
+        '-k',
+        '--keep-alive-interval',
+        dest='keep_alive_interval',
+        default=DEFAULT_KEEP_ALIVE_INTERVAL,
+        type=int,
         help='Interval between two consecutive keep alive'
     )
     # Interval between two consecutive keep alive messages
     parser.add_argument(
-        '-t', '--token-file', dest='token_file',
+        '-t',
+        '--token-file',
+        dest='token_file',
         default=DEFAULT_TOKEN_FILE,
         help='File containing the token used for the authentication'
     )
     # Prefix to be used for SRv6 tunnels
-    parser.add_argument('--sid-prefix', dest='sid_prefix',
-                        action='store', default=None,
-                        help='Prefix to be used for SRv6 tunnels')
+    parser.add_argument(
+        '--sid-prefix',
+        dest='sid_prefix',
+        action='store',
+        default=None,
+        help='Prefix to be used for SRv6 tunnels'
+    )
     # Public prefix length, used to genearte the SRv6 SID list
-    parser.add_argument('--public-prefix-length', dest='public_prefix_length',
-                        action='store', default=None, type=int,
-                        help='Public prefix length used to generate the SRv6 '
-                        'SID list')
+    parser.add_argument(
+        '--public-prefix-length',
+        dest='public_prefix_length',
+        action='store',
+        default=None,
+        type=int,
+        help='Public prefix length used to generate the SRv6 SID list'
+    )
     # Define whether to enable or not proxy NDP for SIDs advertisement
-    parser.add_argument('--disable-proxy-ndp', dest='enable_proxy_ndp',
-                        action='store_false', default=True,
-                        help='Define whether to enable or not proxy NDP for '
-                        'SIDs advertisement')
+    parser.add_argument(
+        '--disable-proxy-ndp',
+        dest='enable_proxy_ndp',
+        action='store_false',
+        default=True,
+        help='Define whether to enable or not proxy NDP for SIDs advertisement'
+    )
     # Define whether to force ip6tnl or not
-    parser.add_argument('--force-ip6tnl', dest='force_ip6tnl',
-                        action='store_true', default=False,
-                        help='Define whether to force ip6tnl or not')
+    parser.add_argument(
+        '--force-ip6tnl',
+        dest='force_ip6tnl',
+        action='store_true',
+        default=False,
+        help='Define whether to force ip6tnl or not'
+    )
     # Define whether to force SRH or not
-    parser.add_argument('--force-srh', dest='force_srh',
-                        action='store_true', default=False,
-                        help='Define whether to force SRH or not')
+    parser.add_argument(
+        '--force-srh',
+        dest='force_srh',
+        action='store_true',
+        default=False,
+        help='Define whether to force SRH or not'
+    )
     # Incoming Segment Routing transparency [ t0 | t1 | op ]
-    parser.add_argument('--incoming-sr-transparency', dest='incoming_sr_transparency',
-                        action='store', default=DEFAULT_INCOMING_SR_TRANSPARENCY,
-                        choices=SUPPORTED_SR_TRANSPARENCY,
-                        help='Incoming Segment Routing transparency [ t0 | t1 | op ]')
+    parser.add_argument(
+        '--incoming-sr-transparency',
+        dest='incoming_sr_transparency',
+        action='store',
+        default=DEFAULT_INCOMING_SR_TRANSPARENCY,
+        choices=SUPPORTED_SR_TRANSPARENCY,
+        help='Incoming Segment Routing transparency [ t0 | t1 | op ]'
+    )
     # Outgoing Segment Routing transparency [ t0 | t1 | op ]
-    parser.add_argument('--outgoing-sr-transparency', dest='outgoing_sr_transparency',
-                        action='store', default=DEFAULT_OUTGOING_SR_TRANSPARENCY,
-                        choices=SUPPORTED_SR_TRANSPARENCY,
-                        help='Outgoing Segment Routing transparency [ t0 | t1 | op ]')
+    parser.add_argument(
+        '--outgoing-sr-transparency',
+        dest='outgoing_sr_transparency',
+        action='store',
+        default=DEFAULT_OUTGOING_SR_TRANSPARENCY,
+        choices=SUPPORTED_SR_TRANSPARENCY,
+        help='Outgoing Segment Routing transparency [ t0 | t1 | op ]'
+    )
     # Is reboot allowed?
-    parser.add_argument('--allow-reboot', dest='allow_reboot',
-                        action='store_true', default=False,
-                        help='Is reboot allowed?')
+    parser.add_argument(
+        '--allow-reboot',
+        dest='allow_reboot',
+        action='store_true',
+        default=False,
+        help='Is reboot allowed?'
+    )
     # Config file
-    parser.add_argument('-c', '--config-file', dest='config_file',
-                        action='store', default=None,
-                        help='Path of the configuration file')
+    parser.add_argument(
+        '-c',
+        '--config-file',
+        dest='config_file',
+        action='store',
+        default=None,
+        help='Path of the configuration file'
+    )
     # Parse input parameters
     args = parser.parse_args()
     # Done, return
@@ -479,72 +590,90 @@ def parse_config_file(config_file):
     args.verbose = config['DEFAULT'].getboolean('verbose', False)
     # Southbound interface
     args.sb_interface = config['DEFAULT'].get(
-        'sb_interface', DEFAULT_SB_INTERFACE)
+        'sb_interface', DEFAULT_SB_INTERFACE
+    )
     # IP address of the southbound gRPC server
     args.grpc_server_ip = config['DEFAULT'].get(
-        'grpc_server_ip', DEFAULT_GRPC_SERVER_IP)
+        'grpc_server_ip', DEFAULT_GRPC_SERVER_IP
+    )
     # Port of the southbound gRPC server
     args.grpc_server_port = config['DEFAULT'].get(
-        'grpc_server_port', DEFAULT_GRPC_SERVER_PORT)
+        'grpc_server_port', DEFAULT_GRPC_SERVER_PORT
+    )
     # Enable secure mode
     args.secure = config['DEFAULT'].getboolean('secure', DEFAULT_SECURE)
     # Server certificate
     args.server_cert = config['DEFAULT'].get(
-        'server_cert', DEFAULT_CERTIFICATE)
+        'server_cert', DEFAULT_CERTIFICATE
+    )
     # Server key
     args.server_key = config['DEFAULT'].get('server_key', DEFAULT_KEY)
     # Password used to log in to ospf6d and zebra daemons
     args.quagga_password = config['DEFAULT'].get(
-        'quagga_password', DEFAULT_QUAGGA_PASSWORD)
+        'quagga_password', DEFAULT_QUAGGA_PASSWORD
+    )
     # Port used to log in to zebra daemon
     args.zebra_port = config['DEFAULT'].get('zebra_port', DEFAULT_ZEBRA_PORT)
     # Port used to log in to ospf6d daemon
     args.ospf6d_port = config['DEFAULT'].get(
-        'ospf6d_port', DEFAULT_OSPF6D_PORT)
+        'ospf6d_port', DEFAULT_OSPF6D_PORT
+    )
     # IP address of the gRPC registration server
     args.pymerang_server_ip = config['DEFAULT'].get(
-        'pymerang_server_ip', DEFAULT_PYMERANG_SERVER_IP)
+        'pymerang_server_ip', DEFAULT_PYMERANG_SERVER_IP
+    )
     # Port of the gRPC server
     args.pymerang_server_port = config['DEFAULT'].get(
-        'pymerang_server_port', DEFAULT_PYMERANG_SERVER_PORT)
+        'pymerang_server_port', DEFAULT_PYMERANG_SERVER_PORT
+    )
     # IP address of the NAT discovery server
     args.nat_discovery_server_ip = config['DEFAULT'].get(
-        'nat_discovery_server_ip', DEFAULT_NAT_DISCOVERY_SERVER_IP)
+        'nat_discovery_server_ip', DEFAULT_NAT_DISCOVERY_SERVER_IP
+    )
     # Port of the NAT discovery server
     args.nat_discovery_server_port = config['DEFAULT'].get(
-        'nat_discovery_server_port', DEFAULT_NAT_DISCOVERY_SERVER_PORT)
+        'nat_discovery_server_port', DEFAULT_NAT_DISCOVERY_SERVER_PORT
+    )
     # IP address used by the NAT discoery client
     args.nat_discovery_client_ip = config['DEFAULT'].get(
-        'nat_discovery_client_ip', DEFAULT_PYMERANG_CLIENT_IP)
+        'nat_discovery_client_ip', DEFAULT_PYMERANG_CLIENT_IP
+    )
     # Port used by the NAT discovery client
     args.nat_discovery_client_port = config['DEFAULT'].get(
-        'nat_discovery_client_port', DEFAULT_NAT_DISCOVERY_CLIENT_PORT)
+        'nat_discovery_client_port', DEFAULT_NAT_DISCOVERY_CLIENT_PORT
+    )
     # File containing the configuration of the device
     args.device_config_file = config['DEFAULT'].get(
-        'device_config_file', DEFAULT_CONFIG_FILE)
+        'device_config_file', DEFAULT_CONFIG_FILE
+    )
     # Interval between two consecutive keep alive messages
     args.keep_alive_interval = int(config['DEFAULT'].get(
-        'keep_alive_interval', DEFAULT_KEEP_ALIVE_INTERVAL))
+        'keep_alive_interval', DEFAULT_KEEP_ALIVE_INTERVAL)
+    )
     # Prefix to be used for SRv6 tunnels
     args.sid_prefix = config['DEFAULT'].get('sid_prefix', None)
     # Public prefix length used to generate the SRv6 SID list
-    args.public_prefix_length = \
-        config['DEFAULT'].get('public_prefix_length', None)
+    args.public_prefix_length = config['DEFAULT'].get(
+        'public_prefix_length', None
+    )
     if args.public_prefix_length is not None:
         args.public_prefix_length = int(args.public_prefix_length)
     # Define whether to enable or not proxy NDP for SIDs advertisement
     args.enable_proxy_ndp = config['DEFAULT'].getboolean(
-        'enable_proxy_ndp', True)
+        'enable_proxy_ndp', True
+    )
     # Define whether to force the device to use ip6tnl or not
     args.force_ip6tnl = config['DEFAULT'].getboolean('force_ip6tnl', False)
     # Define whether to force the device to use SRH or not
     args.force_srh = config['DEFAULT'].getboolean('force_srh', False)
     # Incoming Segment Routing transparency [ t0, t1, op ]
     args.incoming_sr_transparency = config['DEFAULT'].get(
-        'incoming-sr-transparency', DEFAULT_INCOMING_SR_TRANSPARENCY)
+        'incoming-sr-transparency', DEFAULT_INCOMING_SR_TRANSPARENCY
+    )
     # Outgoing Segment Routing transparency [ t0, t1, op ]
     args.outgoing_sr_transparency = config['DEFAULT'].get(
-        'outgoing-sr-transparency', DEFAULT_OUTGOING_SR_TRANSPARENCY)
+        'outgoing-sr-transparency', DEFAULT_OUTGOING_SR_TRANSPARENCY
+    )
     # Is reboot allowed?
     args.allow_reboot = config['DEFAULT'].get('allow-reboot', False)
     # Interval between two consecutive keep alive messages
@@ -633,24 +762,35 @@ def _main():
     logger.info('SERVER_DEBUG:' + str(SERVER_DEBUG))
     # Check interfaces file, dataplane and gRPC client paths
     if sb_interface not in SUPPORTED_SB_INTERFACES:
-        logging.error('Error: %s interface not yet supported or invalid\n'
-                      'Supported southbound interfaces: %s' % (sb_interface, SUPPORTED_SB_INTERFACES))
+        logging.error(
+            'Error: %s interface not yet supported or invalid\n'
+            'Supported southbound interfaces: %s',
+            sb_interface,
+            SUPPORTED_SB_INTERFACES
+        )
         exit(-1)
     # Check SRv6 tunnel parameters
     if force_ip6tnl and force_srh:
-        logging.fatal('Error: force-ip6tnl and force-srh argument cannot be '
-                      'set together')
+        logging.fatal(
+            'Error: force-ip6tnl and force-srh argument cannot be set together'
+        )
         exit(-1)
     # Check transparency settings
     if incoming_sr_transparency not in SUPPORTED_SR_TRANSPARENCY:
-        logging.fatal('Invalid value %s for paramter '
-                      'incoming-sr-transparency. Supported values: %s',
-                      incoming_sr_transparency, SUPPORTED_SR_TRANSPARENCY)
+        logging.fatal(
+            'Invalid value %s for paramter incoming-sr-transparency. '
+            'Supported values: %s',
+            incoming_sr_transparency,
+            SUPPORTED_SR_TRANSPARENCY
+        )
         exit(-1)
     if outgoing_sr_transparency not in SUPPORTED_SR_TRANSPARENCY:
-        logging.fatal('Invalid value %s for paramter '
-                      'outgoing-sr-transparency. Supported values: %s',
-                      outgoing_sr_transparency, SUPPORTED_SR_TRANSPARENCY)
+        logging.fatal(
+            'Invalid value %s for paramter outgoing-sr-transparency. '
+            'Supported values: %s',
+            outgoing_sr_transparency,
+            SUPPORTED_SR_TRANSPARENCY
+        )
         exit(-1)
     # Create a new EveryWAN Edge Device
     ew_edge_device = EWEdgeDevice(
