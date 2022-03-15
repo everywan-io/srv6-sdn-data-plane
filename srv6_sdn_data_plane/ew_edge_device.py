@@ -675,7 +675,7 @@ def parse_config_file(config_file):
         'outgoing-sr-transparency', DEFAULT_OUTGOING_SR_TRANSPARENCY
     )
     # Is reboot allowed?
-    args.allow_reboot = config['DEFAULT'].get('allow-reboot', False)
+    args.allow_reboot = config['DEFAULT'].getboolean('allow-reboot', False)
     # Interval between two consecutive keep alive messages
     args.token_file = config['DEFAULT'].get('token_file', DEFAULT_TOKEN_FILE)
     # Done, return
