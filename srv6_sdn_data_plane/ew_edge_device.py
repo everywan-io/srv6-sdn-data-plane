@@ -631,7 +631,7 @@ def parse_config_file(config_file):
         'nat_discovery_server_ip', DEFAULT_NAT_DISCOVERY_SERVER_IP
     )
     # Port of the NAT discovery server
-    args.nat_discovery_server_port = config['DEFAULT'].get(
+    args.nat_discovery_server_port = config['DEFAULT'].getint(
         'nat_discovery_server_port', DEFAULT_NAT_DISCOVERY_SERVER_PORT
     )
     # IP address used by the NAT discoery client
@@ -639,7 +639,7 @@ def parse_config_file(config_file):
         'nat_discovery_client_ip', DEFAULT_PYMERANG_CLIENT_IP
     )
     # Port used by the NAT discovery client
-    args.nat_discovery_client_port = config['DEFAULT'].get(
+    args.nat_discovery_client_port = config['DEFAULT'].getint(
         'nat_discovery_client_port', DEFAULT_NAT_DISCOVERY_CLIENT_PORT
     )
     # File containing the configuration of the device
@@ -647,13 +647,13 @@ def parse_config_file(config_file):
         'device_config_file', DEFAULT_CONFIG_FILE
     )
     # Interval between two consecutive keep alive messages
-    args.keep_alive_interval = int(config['DEFAULT'].get(
+    args.keep_alive_interval = int(config['DEFAULT'].getint(
         'keep_alive_interval', DEFAULT_KEEP_ALIVE_INTERVAL)
     )
     # Prefix to be used for SRv6 tunnels
     args.sid_prefix = config['DEFAULT'].get('sid_prefix', None)
     # Public prefix length used to generate the SRv6 SID list
-    args.public_prefix_length = config['DEFAULT'].get(
+    args.public_prefix_length = config['DEFAULT'].getint(
         'public_prefix_length', None
     )
     if args.public_prefix_length is not None:
