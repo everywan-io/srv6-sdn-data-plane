@@ -1522,8 +1522,12 @@ def start_server(
         grpc_server = grpc.server(futures.ThreadPoolExecutor())
         # Add the STAMP handlers
         if ENABLE_STAMP_SUPPORT:
-            stamp_sender_module.run_grpc_server(server=grpc_server)
-            stamp_reflector_module.run_grpc_server(server=grpc_server)
+            stamp_sender_module.run_grpc_server(
+                server=grpc_server, stop_event=stop_event
+            )
+            stamp_reflector_module.run_grpc_server(
+                server=grpc_server, stop_event=stop_event
+            )
         srv6_manager_pb2_grpc.add_SRv6ManagerServicer_to_server(
             SRv6Manager(
                 quagga_password,
