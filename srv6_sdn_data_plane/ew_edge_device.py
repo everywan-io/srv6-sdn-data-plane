@@ -72,7 +72,7 @@ SUPPORTED_SR_TRANSPARENCY = ['t0', 't1', 'op']
 DEFAULT_INCOMING_SR_TRANSPARENCY = SUPPORTED_SR_TRANSPARENCY[0]
 DEFAULT_OUTGOING_SR_TRANSPARENCY = SUPPORTED_SR_TRANSPARENCY[0]
 
-# File containing the PID of the running EveryEdge processs
+# File containing the PID of the running EveryEdge process
 PIDFILE = '/var/run/everyedge.pid'
 
 
