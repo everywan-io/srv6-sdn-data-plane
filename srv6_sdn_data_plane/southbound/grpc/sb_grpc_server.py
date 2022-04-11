@@ -619,9 +619,9 @@ class SRv6Manager(srv6_manager_pb2_grpc.SRv6ManagerServicer):
                                 mask=int(ip.split('/')[1]),
                                 family=family
                             )
-                        except NetlinkError:
+                        except NetlinkError as err:
                             if not request.ignore_errors:
-                                raise NetlinkError
+                                raise NetlinkError(err.code)
                     elif family == AF_UNSPEC:
                         if op == 'del':
                             # Remove IPv4/IPv6 address
