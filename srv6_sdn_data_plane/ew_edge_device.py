@@ -8,6 +8,7 @@ import os
 import signal
 import threading
 import logging
+from filelock import FileLock, Timeout
 from functools import partial
 from argparse import ArgumentParser
 from threading import Thread
@@ -70,6 +71,9 @@ SUPPORTED_SR_TRANSPARENCY = ['t0', 't1', 'op']
 # Default settings for Segment Routing transparency
 DEFAULT_INCOMING_SR_TRANSPARENCY = SUPPORTED_SR_TRANSPARENCY[0]
 DEFAULT_OUTGOING_SR_TRANSPARENCY = SUPPORTED_SR_TRANSPARENCY[0]
+
+# File containing the PID of the running EveryEdge process
+PIDFILE = '/var/run/everyedge.pid'
 
 
 class EWEdgeDevice(object):
@@ -822,8 +826,29 @@ def _main():
         allow_reboot=allow_reboot,
         verbose=verbose
     )
-    # Start the edge device
-    ew_edge_device.run()
+
+    # EveryEdge requires root permissions to change Linux network entities
+    if os.geteuid() != 0:
+        logging.fatal('EveryEdge must run as root')
+        exit(-1)
+
+    try:
+        # Lock PID file
+        with FileLock(PIDFILE, timeout=0):
+            # Write PID of the current process to the PID file
+            with open(PIDFILE, 'w') as f:
+                f.write(f'{os.getpid()}\n')
+            # Start the edge device
+            ew_edge_device.run()
+            # Remove PID file on exit
+            os.remove(PIDFILE)
+    except Timeout:
+        # Could not lock PID file
+        logging.fatal(
+            f'Could not lock PID file {PIDFILE}. Exiting. Please ensure that '
+            'EveryEdge is not already running.'
+        )
+        exit(-1)
 
 
 if __name__ == '__main__':
