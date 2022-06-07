@@ -36,7 +36,7 @@ setup(
         'ipaddress>=1.0.22',
         'networkx==1.11',
         'protobuf>=3.7.1',
-        'pyroute2>=0.6.9',
+        'pyroute2==0.6.9',
         'six>=1.12.0',
         'pqueue>=0.1.7',
         'filelock>=3.4.0'
