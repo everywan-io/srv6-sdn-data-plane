@@ -31,8 +31,8 @@ setup(
               'srv6_sdn_data_plane.southbound.ssh'],  # Required
     install_requires=[
         'setuptools',
-        'grpcio>=1.19.0',
-        'grpcio-tools>=1.19.0',
+        'grpcio=1.19.0',
+        'grpcio-tools=1.19.0',
         'ipaddress>=1.0.22',
         'networkx==1.11',
         'protobuf>=3.7.1',
